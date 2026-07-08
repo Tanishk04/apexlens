@@ -175,7 +175,7 @@ export class TreeBuilder {
       };
       this.exceptions.push(exc);
       const stmt: StatementEvent = {
-        id: this.generateId(),
+        id: exc.id, // share id so selecting the exception highlights this row
         type: 'EXCEPTION',
         event,
         timestamp: timestampNs,

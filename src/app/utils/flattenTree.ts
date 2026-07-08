@@ -105,6 +105,29 @@ export function flattenExecutionTree(
   return result;
 }
 
+/** Build an id -> node index over the whole tree (nodes and statements). */
+export function indexTree(root: ExecutionNode | null): Map<string, ExecutionNode | StatementEvent> {
+  const map = new Map<string, ExecutionNode | StatementEvent>();
+  function walk(node: ExecutionNode | StatementEvent) {
+    map.set(node.id, node);
+    if (isExecutionNode(node)) for (const child of node.children) walk(child);
+  }
+  if (root) walk(root);
+  return map;
+}
+
+/** Ids of all non-synthetic execution nodes that have children (collapsible). */
+export function collectExpandableIds(root: ExecutionNode | null): string[] {
+  const ids: string[] = [];
+  function walk(node: ExecutionNode | StatementEvent) {
+    if (!isExecutionNode(node)) return;
+    if (!node.synthetic && node.children.length > 0) ids.push(node.id);
+    for (const child of node.children) walk(child);
+  }
+  if (root) walk(root);
+  return ids;
+}
+
 export function flattenEventLines(
   eventLines: LogEventLine[],
   options: FlattenOptions = {},
