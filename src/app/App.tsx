@@ -5,6 +5,11 @@ import { Sidebar } from './components/Sidebar';
 import { VirtualTree } from './components/VirtualTree';
 import { FilterBar } from './components/FilterBar';
 import { Inspector } from './components/Inspector';
+import { TabBar, type MainTab } from './components/TabBar';
+import { GovernorDashboard } from './components/GovernorDashboard';
+import { AnalysisView } from './components/AnalysisView';
+import { RawLogView } from './components/RawLogView';
+import { analyze } from './utils/analysis';
 import {
   flattenEventLines,
   flattenExecutionTree,
@@ -46,6 +51,7 @@ const App = () => {
   const [activeTypes, setActiveTypes] = useState<Set<string>>(new Set());
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [tab, setTab] = useState<MainTab>('tree');
 
   useEffect(() => {
     async function loadLog() {
@@ -111,6 +117,8 @@ const App = () => {
     }
     return TYPE_ORDER.filter((t) => present.has(t));
   }, [nodeIndex]);
+
+  const analysis = useMemo(() => analyze(parsedLog?.executionTree ?? null), [parsedLog]);
 
   const selected = selectedId ? nodeIndex.get(selectedId) ?? null : null;
 
@@ -187,31 +195,49 @@ const App = () => {
           </div>
         ) : null}
 
-        <FilterBar
-          availableTypes={availableTypes}
-          activeTypes={activeTypes}
-          onToggleType={toggleType}
-          onClearTypes={() => setActiveTypes(new Set())}
-          search={search}
-          onSearch={setSearch}
-          showDebug={showDebug}
-          onToggleDebug={setShowDebug}
-          onExpandAll={expandAll}
-          onCollapseAll={collapseAll}
+        <TabBar
+          active={tab}
+          onChange={setTab}
+          exceptionCount={parsedLog?.metrics.exceptionCount ?? 0}
         />
 
+        {tab === 'tree' ? (
+          <FilterBar
+            availableTypes={availableTypes}
+            activeTypes={activeTypes}
+            onToggleType={toggleType}
+            onClearTypes={() => setActiveTypes(new Set())}
+            search={search}
+            onSearch={setSearch}
+            showDebug={showDebug}
+            onToggleDebug={setShowDebug}
+            onExpandAll={expandAll}
+            onCollapseAll={collapseAll}
+          />
+        ) : null}
+
         <div className="min-h-0 min-w-0 flex-1">
-          {treeNodes.length > 0 ? (
-            <VirtualTree
-              nodes={treeNodes}
-              selectedId={selectedId}
-              onSelect={setSelectedId}
-              onToggle={toggleNode}
-            />
+          {tab === 'tree' ? (
+            treeNodes.length > 0 ? (
+              <VirtualTree
+                nodes={treeNodes}
+                selectedId={selectedId}
+                onSelect={setSelectedId}
+                onToggle={toggleNode}
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center text-sm text-zinc-500">
+                No events match the current filters.
+              </div>
+            )
+          ) : tab === 'governor' ? (
+            parsedLog ? (
+              <GovernorDashboard limits={parsedLog.governorLimits} metrics={parsedLog.metrics} />
+            ) : null
+          ) : tab === 'analysis' ? (
+            <AnalysisView analysis={analysis} />
           ) : (
-            <div className="flex h-full items-center justify-center text-sm text-zinc-500">
-              No events match the current filters.
-            </div>
+            <RawLogView lines={parsedLog?.eventLines ?? []} />
           )}
         </div>
       </main>
