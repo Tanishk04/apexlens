@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Download, Command } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { VirtualTree } from './components/VirtualTree';
 import { FilterBar } from './components/FilterBar';
@@ -10,11 +10,17 @@ import { GovernorDashboard } from './components/GovernorDashboard';
 import { AnalysisView } from './components/AnalysisView';
 import { RawLogView } from './components/RawLogView';
 import { Timeline } from './components/Timeline';
+import { CommandPalette, type Command as PaletteCommand } from './components/CommandPalette';
 import { analyze } from './utils/analysis';
+import { toMarkdown, downloadText } from './utils/exportMarkdown';
+import { buildAiContext } from '../ai/context';
+import { anthropicProvider } from '../ai/adapter';
 import {
   flattenEventLines,
   flattenExecutionTree,
   indexTree,
+  buildParentMap,
+  ancestorIds,
   collectExpandableIds,
 } from './utils/flattenTree';
 import { getSessionId, fetchLogBody } from '../api/salesforce';
@@ -53,6 +59,13 @@ const App = () => {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tab, setTab] = useState<MainTab>('tree');
+  const [scrollToId, setScrollToId] = useState<string | null>(null);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [ai, setAi] = useState<{ loading: boolean; result: string | null; error: string | null }>({
+    loading: false,
+    result: null,
+    error: null,
+  });
 
   useEffect(() => {
     async function loadLog() {
@@ -81,8 +94,12 @@ const App = () => {
 
         const parsed = await parseLogInWorker(body);
         setParsedLog(parsed);
-        // Error-first: preselect the first exception on load.
-        if (parsed.exceptions.length > 0) setSelectedId(parsed.exceptions[0]!.id);
+        // Error-first: preselect the first exception and scroll the tree to it.
+        if (parsed.exceptions.length > 0) {
+          const excId = parsed.exceptions[0]!.id;
+          setSelectedId(excId);
+          setScrollToId(excId);
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load debug log');
       } finally {
@@ -120,8 +137,57 @@ const App = () => {
   }, [nodeIndex]);
 
   const analysis = useMemo(() => analyze(parsedLog?.executionTree ?? null), [parsedLog]);
+  const parentMap = useMemo(
+    () => buildParentMap(parsedLog?.executionTree ?? null),
+    [parsedLog],
+  );
 
   const selected = selectedId ? nodeIndex.get(selectedId) ?? null : null;
+
+  /** Select a node, expand its ancestors, switch to the Tree tab and scroll to it. */
+  const revealNode = useCallback(
+    (id: string) => {
+      const ancestors = ancestorIds(id, parentMap, nodeIndex);
+      if (ancestors.length > 0) {
+        setCollapsed((prev) => {
+          const next = new Set(prev);
+          for (const a of ancestors) next.delete(a);
+          return next;
+        });
+      }
+      setSelectedId(id);
+      setTab('tree');
+      setScrollToId(id);
+    },
+    [parentMap, nodeIndex],
+  );
+
+  const explainWithAI = useCallback(async () => {
+    if (!parsedLog) return;
+    let key = localStorage.getItem('sfda_anthropic_key');
+    if (!key) {
+      key = window.prompt('Enter your Anthropic API key (stored locally, never uploaded):');
+      if (!key) return;
+      localStorage.setItem('sfda_anthropic_key', key);
+    }
+    setAi({ loading: true, result: null, error: null });
+    try {
+      const context = buildAiContext(parsedLog, analysis);
+      const result = await anthropicProvider.explain(context, key);
+      setAi({ loading: false, result, error: null });
+    } catch (err) {
+      setAi({
+        loading: false,
+        result: null,
+        error: err instanceof Error ? err.message : 'AI request failed',
+      });
+    }
+  }, [parsedLog, analysis]);
+
+  const exportMarkdown = useCallback(() => {
+    if (!parsedLog) return;
+    downloadText('salesforce-debug-log.md', toMarkdown(parsedLog, analysis));
+  }, [parsedLog, analysis]);
 
   const toggleNode = (id: string) =>
     setCollapsed((prev) => {
@@ -141,6 +207,44 @@ const App = () => {
 
   const expandAll = () => setCollapsed(new Set());
   const collapseAll = () => setCollapsed(new Set(collectExpandableIds(parsedLog?.executionTree ?? null)));
+
+  // ⌘K / Ctrl+K toggles the command palette.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPaletteOpen((o) => !o);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const commands = useMemo<PaletteCommand[]>(() => {
+    const cmds: PaletteCommand[] = [
+      { id: 'tab-tree', label: 'Go to Tree', hint: 'view', run: () => setTab('tree') },
+      { id: 'tab-timeline', label: 'Go to Timeline', hint: 'view', run: () => setTab('timeline') },
+      { id: 'tab-governor', label: 'Go to Governor', hint: 'view', run: () => setTab('governor') },
+      { id: 'tab-analysis', label: 'Go to Analysis', hint: 'view', run: () => setTab('analysis') },
+      { id: 'tab-raw', label: 'Go to Raw log', hint: 'view', run: () => setTab('raw') },
+      { id: 'expand', label: 'Expand all', hint: 'tree', run: expandAll },
+      { id: 'collapse', label: 'Collapse all', hint: 'tree', run: collapseAll },
+      { id: 'clear', label: 'Clear type filters', hint: 'filter', run: () => setActiveTypes(new Set()) },
+      { id: 'export', label: 'Export report as Markdown', hint: 'export', run: exportMarkdown },
+      { id: 'ai', label: 'Explain log with AI', hint: 'ai', run: explainWithAI },
+    ];
+    const exceptions = parsedLog?.exceptions ?? [];
+    exceptions.forEach((ex, i) => {
+      cmds.push({
+        id: 'exc-' + ex.id,
+        label: `Jump to exception: ${ex.exceptionType}`,
+        hint: `error ${i + 1}`,
+        run: () => revealNode(ex.id),
+      });
+    });
+    return cmds;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [parsedLog, exportMarkdown, explainWithAI, revealNode]);
 
   if (loading) {
     return (
@@ -177,17 +281,35 @@ const App = () => {
               </span>
             ) : null}
           </h1>
-          {m ? (
-            <div className="flex shrink-0 items-center gap-3 text-xs text-zinc-500">
-              <span>SOQL {m.totalSoql}</span>
-              <span>DML {m.totalDml}</span>
-              <span>Rows {m.totalDmlRows}</span>
-              {m.cpuTimeMs > 0 ? <span>CPU {m.cpuTimeMs}ms</span> : null}
-              <span className={m.exceptionCount > 0 ? 'text-red-400' : ''}>
-                Errors {m.exceptionCount}
-              </span>
-            </div>
-          ) : null}
+          <div className="flex shrink-0 items-center gap-3 text-xs text-zinc-500">
+            {m ? (
+              <>
+                <span>SOQL {m.totalSoql}</span>
+                <span>DML {m.totalDml}</span>
+                <span>Rows {m.totalDmlRows}</span>
+                {m.cpuTimeMs > 0 ? <span>CPU {m.cpuTimeMs}ms</span> : null}
+                <span className={m.exceptionCount > 0 ? 'text-red-400' : ''}>
+                  Errors {m.exceptionCount}
+                </span>
+              </>
+            ) : null}
+            <button
+              type="button"
+              onClick={exportMarkdown}
+              title="Export report as Markdown"
+              className="flex items-center gap-1 rounded-md border border-zinc-800 px-2 py-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+            >
+              <Download size={13} /> Export
+            </button>
+            <button
+              type="button"
+              onClick={() => setPaletteOpen(true)}
+              title="Command palette (⌘K)"
+              className="flex items-center gap-1 rounded-md border border-zinc-800 px-2 py-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+            >
+              <Command size={13} /> K
+            </button>
+          </div>
         </header>
 
         {parsedLog?.truncated ? (
@@ -225,6 +347,7 @@ const App = () => {
                 selectedId={selectedId}
                 onSelect={setSelectedId}
                 onToggle={toggleNode}
+                scrollToId={scrollToId}
               />
             ) : (
               <div className="flex h-full items-center justify-center text-sm text-zinc-500">
@@ -252,7 +375,15 @@ const App = () => {
       <Inspector
         selected={selected}
         exceptions={parsedLog?.exceptions ?? []}
-        onSelectException={setSelectedId}
+        onSelectException={revealNode}
+        onExplain={explainWithAI}
+        ai={ai}
+      />
+
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        commands={commands}
       />
     </div>
   );

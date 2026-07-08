@@ -2,10 +2,18 @@ import React from 'react';
 import { AlertTriangle, Sparkles, ChevronRight } from 'lucide-react';
 import type { ExecutionNode, StatementEvent, LogException } from '../../types';
 
+interface AiState {
+  loading: boolean;
+  result: string | null;
+  error: string | null;
+}
+
 interface InspectorProps {
   selected: ExecutionNode | StatementEvent | null;
   exceptions: LogException[];
   onSelectException: (id: string) => void;
+  onExplain: () => void;
+  ai: AiState;
 }
 
 function isExecutionNode(n: ExecutionNode | StatementEvent): n is ExecutionNode {
@@ -21,7 +29,13 @@ function Row({ label, value, mono }: { label: string; value: React.ReactNode; mo
   );
 }
 
-export const Inspector = ({ selected, exceptions, onSelectException }: InspectorProps) => {
+export const Inspector = ({
+  selected,
+  exceptions,
+  onSelectException,
+  onExplain,
+  ai,
+}: InspectorProps) => {
   return (
     <aside className="flex w-80 shrink-0 flex-col border-l border-zinc-800/60 bg-zinc-950">
       <header className="flex h-12 shrink-0 items-center border-b border-zinc-800/60 bg-zinc-900/50 px-4">
@@ -102,14 +116,28 @@ export const Inspector = ({ selected, exceptions, onSelectException }: Inspector
                 <Row label="Result" value={selected.validationResult} />
               ) : null}
               {selected.type === 'EXCEPTION' ? (
-                <button
-                  type="button"
-                  className="flex w-full items-center justify-center gap-2 rounded-md bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-900 transition-colors hover:bg-white"
-                  title="AI diagnosis (coming soon)"
-                >
-                  <Sparkles size={16} className="text-blue-600" />
-                  Explain with AI
-                </button>
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={onExplain}
+                    disabled={ai.loading}
+                    className="flex w-full items-center justify-center gap-2 rounded-md bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-900 transition-colors hover:bg-white disabled:opacity-60"
+                    title="Send the structured log summary (never the raw log) to Claude"
+                  >
+                    <Sparkles size={16} className="text-blue-600" />
+                    {ai.loading ? 'Diagnosing…' : 'Explain with AI'}
+                  </button>
+                  {ai.error ? (
+                    <p className="rounded-md bg-red-500/10 px-3 py-2 text-xs text-red-400">
+                      {ai.error}
+                    </p>
+                  ) : null}
+                  {ai.result ? (
+                    <div className="whitespace-pre-wrap break-words rounded-md border border-zinc-800 bg-zinc-900 p-3 text-xs leading-relaxed text-zinc-300">
+                      {ai.result}
+                    </div>
+                  ) : null}
+                </div>
               ) : null}
               <div className="whitespace-pre-wrap break-words rounded-md border border-zinc-800 bg-zinc-900 p-3 font-mono text-xs text-zinc-300">
                 {selected.text}

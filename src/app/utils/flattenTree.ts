@@ -116,6 +116,37 @@ export function indexTree(root: ExecutionNode | null): Map<string, ExecutionNode
   return map;
 }
 
+/** Map every node/statement id to its parent execution-node id (or null). */
+export function buildParentMap(root: ExecutionNode | null): Map<string, string | null> {
+  const map = new Map<string, string | null>();
+  function walk(node: ExecutionNode | StatementEvent, parentId: string | null) {
+    map.set(node.id, parentId);
+    if (isExecutionNode(node)) for (const child of node.children) walk(child, node.id);
+  }
+  if (root) walk(root, null);
+  return map;
+}
+
+/**
+ * Ancestor execution-node ids from a node up to the root (nearest first),
+ * excluding the node itself and the synthetic root. Used to expand the path to
+ * a node so it becomes visible (error-first navigation).
+ */
+export function ancestorIds(
+  id: string,
+  parents: Map<string, string | null>,
+  index: Map<string, ExecutionNode | StatementEvent>,
+): string[] {
+  const result: string[] = [];
+  let current = parents.get(id) ?? null;
+  while (current) {
+    const node = index.get(current);
+    if (node && 'children' in node && !node.synthetic) result.push(current);
+    current = parents.get(current) ?? null;
+  }
+  return result;
+}
+
 /** Ids of all non-synthetic execution nodes that have children (collapsible). */
 export function collectExpandableIds(root: ExecutionNode | null): string[] {
   const ids: string[] = [];

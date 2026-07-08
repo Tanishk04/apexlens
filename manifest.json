@@ -24,7 +24,8 @@
     "https://*.develop.my.salesforce-setup.com/*",
     "https://*.scratch.my.salesforce-setup.com/*",
     "https://*.lightning.force.com/*",
-    "https://*.visual.force.com/*"
+    "https://*.visual.force.com/*",
+    "https://api.anthropic.com/*"
   ],
   "background": {
     "service_worker": "src/background/index.ts",

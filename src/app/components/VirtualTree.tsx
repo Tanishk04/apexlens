@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   ChevronRight,
@@ -23,6 +23,8 @@ interface VirtualTreeProps {
   selectedId: string | null;
   onSelect: (id: string) => void;
   onToggle: (id: string) => void;
+  /** When set, scroll this row into view (error-first navigation). */
+  scrollToId?: string | null;
 }
 
 const TYPE_STYLE: Record<string, { color: string; badge: string; Icon: typeof Database }> = {
@@ -51,7 +53,13 @@ function styleFor(type: string) {
   return TYPE_STYLE[type] ?? TYPE_STYLE.GENERIC!;
 }
 
-export const VirtualTree = ({ nodes, selectedId, onSelect, onToggle }: VirtualTreeProps) => {
+export const VirtualTree = ({
+  nodes,
+  selectedId,
+  onSelect,
+  onToggle,
+  scrollToId,
+}: VirtualTreeProps) => {
   const parentRef = useRef<HTMLDivElement>(null);
 
   const rowVirtualizer = useVirtualizer({
@@ -60,6 +68,13 @@ export const VirtualTree = ({ nodes, selectedId, onSelect, onToggle }: VirtualTr
     estimateSize: () => 30,
     overscan: 25,
   });
+
+  useEffect(() => {
+    if (!scrollToId) return;
+    const index = nodes.findIndex((n) => n.id === scrollToId);
+    if (index >= 0) rowVirtualizer.scrollToIndex(index, { align: 'center' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scrollToId, nodes]);
 
   return (
     <div ref={parentRef} className="h-full min-h-0 w-full overflow-auto bg-zinc-950">
