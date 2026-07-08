@@ -1,52 +1,13 @@
-/** Events hidden by default — low signal for debugging. */
-const NOISE_EVENTS = new Set([
-  'HEAP_ALLOCATE',
-  'STATEMENT_EXECUTE',
-  'VARIABLE_SCOPE_BEGIN',
-  'VARIABLE_ASSIGNMENT',
-  'SYSTEM_MODE_ENTER',
-  'SYSTEM_MODE_EXIT',
-  'USER_INFO',
-  'CUMULATIVE_LIMIT_USAGE',
-  'CUMULATIVE_LIMIT_USAGE_END',
-]);
+import {
+  eventCategory,
+  isEntryEvent,
+  isExitEvent,
+  isNoiseEvent,
+} from './events';
 
-/** Exit events — duration is shown on the matching entry. */
-const EXIT_EVENT_NAMES = new Set([
-  'METHOD_EXIT',
-  'CONSTRUCTOR_EXIT',
-  'CODE_UNIT_FINISHED',
-  'SOQL_EXECUTE_END',
-  'DML_END',
-  'CALLOUT_RESPONSE',
-  'EXECUTION_FINISHED',
-  'FLOW_ELEMENT_ERROR',
-]);
+export { isEntryEvent, isExitEvent, isNoiseEvent };
 
-const ENTRY_EVENTS = new Set([
-  'CODE_UNIT_STARTED',
-  'METHOD_ENTRY',
-  'CONSTRUCTOR_ENTRY',
-  'SOQL_EXECUTE_BEGIN',
-  'DML_BEGIN',
-  'CALLOUT_REQUEST',
-]);
-
-export function isNoiseEvent(event: string): boolean {
-  return NOISE_EVENTS.has(event) || event.includes('LIMIT_USAGE');
-}
-
-export function isExitEvent(event: string): boolean {
-  if (event === 'EXECUTION_FINISHED') return true;
-  return EXIT_EVENT_NAMES.has(event) || event.endsWith('_EXIT');
-}
-
-export function isEntryEvent(event: string): boolean {
-  if (event === 'EXECUTION_STARTED' || event === 'EXECUTION_FINISHED') return false;
-  if (ENTRY_EVENTS.has(event)) return true;
-  return event.startsWith('FLOW_START_');
-}
-
+/** True if an event should appear as a row in the tree/list by default. */
 export function shouldDisplayEvent(event: string, showDebug = false): boolean {
   if (isNoiseEvent(event)) return false;
   if (isExitEvent(event)) return false;
@@ -55,6 +16,15 @@ export function shouldDisplayEvent(event: string, showDebug = false): boolean {
   return true;
 }
 
+/** Coarse category string used by the UI for coloring/filtering. */
+export function mapEventCategory(event: string): string {
+  return eventCategory(event);
+}
+
+/**
+ * Produce a short, human-friendly label for a log event from its raw payload.
+ * The payload is the pipe-delimited remainder after `time|EVENT`.
+ */
 export function formatEventLabel(event: string, payload: string): string {
   const parts = payload.split('|').filter((part) => part.length > 0);
 
@@ -66,34 +36,47 @@ export function formatEventLabel(event: string, payload: string): string {
     }
     case 'METHOD_ENTRY':
     case 'CONSTRUCTOR_ENTRY':
+    case 'SYSTEM_METHOD_ENTRY':
+    case 'SYSTEM_CONSTRUCTOR_ENTRY':
       return parts[parts.length - 1] || payload || event;
-    case 'SOQL_EXECUTE_BEGIN': {
-      const queryStart = parts.findIndex((part) => /^SELECT\b/i.test(part));
+    case 'SOQL_EXECUTE_BEGIN':
+    case 'SOSL_EXECUTE_BEGIN': {
+      const queryStart = parts.findIndex((part) => /^SELECT\b|^FIND\b/i.test(part));
       if (queryStart >= 0) return parts.slice(queryStart).join('|');
       return parts[parts.length - 1] || payload || event;
     }
+    case 'DML_BEGIN': {
+      // [line]|Op:Insert|Type:Account|Rows:1
+      const op = parts.find((p) => p.startsWith('Op:'))?.slice(3);
+      const type = parts.find((p) => p.startsWith('Type:'))?.slice(5);
+      const rows = parts.find((p) => p.startsWith('Rows:'))?.slice(5);
+      if (op || type) return `${op ?? 'DML'} ${type ?? ''}${rows ? ` (${rows} rows)` : ''}`.trim();
+      return payload || event;
+    }
+    case 'FLOW_START_INTERVIEW_BEGIN':
+    case 'FLOW_CREATE_INTERVIEW_BEGIN':
+      return parts[parts.length - 1] || payload || event;
+    case 'FLOW_ELEMENT_BEGIN':
+    case 'FLOW_BULK_ELEMENT_BEGIN':
+      // [..]|<elementType>|<elementName>
+      return parts.slice(-2).join(' · ') || payload || event;
+    case 'VALIDATION_RULE':
+      // <id>|<ruleName>
+      return parts[parts.length - 1] || payload || event;
+    case 'VALIDATION_FORMULA':
+      return parts[0] || payload || event;
     case 'USER_DEBUG':
+      // [line]|LEVEL|message
       return parts.length >= 3 ? parts.slice(2).join('|') : parts[parts.length - 1] || payload;
+    case 'CALLOUT_REQUEST':
+    case 'CALLOUT_RESPONSE':
+    case 'NAMED_CREDENTIAL_REQUEST':
+      return parts[parts.length - 1] || payload || event;
     case 'EXCEPTION_THROWN':
     case 'FATAL_ERROR':
       return payload || event;
-    case 'DML_BEGIN':
-    case 'CALLOUT_REQUEST':
-      return parts[parts.length - 1] || payload || event;
     default:
       if (parts.length === 0) return event;
-      return parts[parts.length - 1];
+      return parts[parts.length - 1]!;
   }
-}
-
-export function mapEventCategory(event: string): string {
-  if (event.includes('SOQL')) return 'SOQL';
-  if (event.includes('METHOD') || event.includes('CONSTRUCTOR')) return 'METHOD';
-  if (event.includes('FLOW')) return 'FLOW';
-  if (event.includes('DML')) return 'DML';
-  if (event.includes('CALLOUT')) return 'CALLOUT';
-  if (event.includes('EXCEPTION') || event.includes('FATAL')) return 'EXCEPTION';
-  if (event.includes('DEBUG')) return 'DEBUG';
-  if (event.includes('CODE_UNIT')) return 'CODE_UNIT';
-  return 'SYSTEM';
 }

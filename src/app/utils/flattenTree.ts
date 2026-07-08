@@ -9,31 +9,34 @@ export interface FlatTreeNode {
   durationMs: number;
   lineNumber?: number;
   event?: string;
+  /** True when this row is an ExecutionNode that has visible children. */
+  expandable: boolean;
+  /** True when currently collapsed (children hidden). */
+  collapsed: boolean;
 }
 
 interface FlattenOptions {
   showDebug?: boolean;
+  /** Set of collapsed node ids; their descendants are hidden. */
+  collapsed?: Set<string>;
+  /** Optional set of node types to include (undefined = all). */
+  types?: Set<string>;
+  /** Optional case-insensitive text filter on the row name. */
+  search?: string;
 }
 
 function isExecutionNode(node: ExecutionNode | StatementEvent): node is ExecutionNode {
   return 'children' in node;
 }
 
-function shouldDisplayNode(
-  node: ExecutionNode | StatementEvent,
-  options: FlattenOptions,
-): boolean {
-  if (isExecutionNode(node)) return true;
-  if (node.type === 'EXCEPTION') return true;
+function statementVisible(node: StatementEvent, options: FlattenOptions): boolean {
   if (node.type === 'DEBUG') return Boolean(options.showDebug);
-  return false;
+  if (node.type === 'ASSIGNMENT' || node.type === 'STATEMENT') return false;
+  return true; // EXCEPTION, VALIDATION, GENERIC
 }
 
-function displayType(node: ExecutionNode): string {
-  if (node.soql) return 'SOQL';
-  if (node.type === 'METHOD') return 'METHOD';
-  if (node.type === 'SYSTEM') return 'CODE_UNIT';
-  return node.type;
+function durationMs(node: ExecutionNode): number {
+  return Math.round(node.durationNs / 1_000_000);
 }
 
 export function flattenExecutionTree(
@@ -41,26 +44,50 @@ export function flattenExecutionTree(
   options: FlattenOptions = {},
 ): FlatTreeNode[] {
   const result: FlatTreeNode[] = [];
+  const collapsed = options.collapsed ?? new Set<string>();
+  const typeFilter = options.types;
+  const search = options.search?.trim().toLowerCase();
+
+  function matches(type: string, name: string): boolean {
+    if (typeFilter && !typeFilter.has(type)) return false;
+    if (search && !name.toLowerCase().includes(search)) return false;
+    return true;
+  }
 
   function walk(node: ExecutionNode | StatementEvent, depth: number) {
-    if (!shouldDisplayNode(node, options)) return;
-
     if (isExecutionNode(node)) {
-      result.push({
-        id: node.id,
-        depth,
-        type: displayType(node),
-        name: node.soql || node.name,
-        durationMs: Math.round(node.durationNs / 1_000_000),
-        lineNumber: node.lineNumber,
-      });
+      if (node.synthetic) {
+        for (const child of node.children) walk(child, depth);
+        return;
+      }
 
-      for (const child of node.children) {
-        walk(child, depth + 1);
+      const isCollapsed = collapsed.has(node.id);
+      const hasVisibleChildren = node.children.some((c) =>
+        isExecutionNode(c) ? true : statementVisible(c, options),
+      );
+
+      if (matches(node.type, node.name)) {
+        result.push({
+          id: node.id,
+          depth,
+          type: node.type,
+          name: node.soql || node.name,
+          durationMs: durationMs(node),
+          lineNumber: node.lineNumber,
+          event: node.event,
+          expandable: hasVisibleChildren,
+          collapsed: isCollapsed,
+        });
+      }
+
+      if (!isCollapsed) {
+        for (const child of node.children) walk(child, depth + 1);
       }
       return;
     }
 
+    if (!statementVisible(node, options)) return;
+    if (!matches(node.type, node.text)) return;
     result.push({
       id: node.id,
       depth,
@@ -68,14 +95,13 @@ export function flattenExecutionTree(
       name: node.text,
       durationMs: 0,
       lineNumber: node.lineNumber,
-      event: node.type,
+      event: node.event,
+      expandable: false,
+      collapsed: false,
     });
   }
 
-  if (root) {
-    walk(root, 0);
-  }
-
+  if (root) walk(root, 0);
   return result;
 }
 
@@ -83,6 +109,8 @@ export function flattenEventLines(
   eventLines: LogEventLine[],
   options: FlattenOptions = {},
 ): FlatTreeNode[] {
+  const typeFilter = options.types;
+  const search = options.search?.trim().toLowerCase();
   return eventLines
     .filter((line) => shouldDisplayEvent(line.event, options.showDebug))
     .map((line) => ({
@@ -93,5 +121,12 @@ export function flattenEventLines(
       durationMs: 0,
       lineNumber: line.lineNumber,
       event: line.event,
-    }));
+      expandable: false,
+      collapsed: false,
+    }))
+    .filter(
+      (row) =>
+        (!typeFilter || typeFilter.has(row.type)) &&
+        (!search || row.name.toLowerCase().includes(search)),
+    );
 }

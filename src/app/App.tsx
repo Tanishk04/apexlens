@@ -5,7 +5,7 @@ import { Sidebar } from './components/Sidebar';
 import { VirtualTree } from './components/VirtualTree';
 import { flattenEventLines, flattenExecutionTree } from './utils/flattenTree';
 import { getSessionId, fetchLogBody } from '../api/salesforce';
-import { SalesforceLogParser } from '../parser';
+import { parseLogInWorker } from './utils/parseInWorker';
 import type { ParsedDebugLog } from '../types';
 import '../index.css';
 
@@ -36,9 +36,8 @@ const App = () => {
         }
 
         const body = await fetchLogBody(domain, sessionId, logId);
-        const parser = new SalesforceLogParser();
-        parser.parseChunk(body);
-        setParsedLog(parser.finish());
+        const parsed = await parseLogInWorker(body);
+        setParsedLog(parsed);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to load debug log';
         setError(message);
