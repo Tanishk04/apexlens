@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "Salesforce Debug Log Assistant",
+  "version": "1.0.0",
+  "description": "Next-Generation Salesforce Debug Log Assistant",
+  "action": {
+    "default_popup": "src/popup/index.html"
+  },
+  "permissions": [
+    "cookies",
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://*.salesforce.com/*",
+    "https://*.force.com/*",
+    "https://*.salesforce-setup.com/*",
+    "https://*.my.salesforce.com/*",
+    "https://*.sandbox.my.salesforce.com/*",
+    "https://*.develop.my.salesforce.com/*",
+    "https://*.scratch.my.salesforce.com/*",
+    "https://*.my.salesforce-setup.com/*",
+    "https://*.sandbox.my.salesforce-setup.com/*",
+    "https://*.develop.my.salesforce-setup.com/*",
+    "https://*.scratch.my.salesforce-setup.com/*",
+    "https://*.lightning.force.com/*",
+    "https://*.visual.force.com/*"
+  ],
+  "background": {
+    "service_worker": "src/background/index.ts",
+    "type": "module"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["src/app/index.html"],
+      "matches": ["*://*/*"]
+    }
+  ]
+}
