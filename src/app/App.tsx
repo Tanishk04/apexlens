@@ -9,6 +9,7 @@ import { TabBar, type MainTab } from './components/TabBar';
 import { GovernorDashboard } from './components/GovernorDashboard';
 import { AnalysisView } from './components/AnalysisView';
 import { RawLogView } from './components/RawLogView';
+import { Timeline } from './components/Timeline';
 import { analyze } from './utils/analysis';
 import {
   flattenEventLines,
@@ -230,6 +231,12 @@ const App = () => {
                 No events match the current filters.
               </div>
             )
+          ) : tab === 'timeline' ? (
+            <Timeline
+              root={parsedLog?.executionTree ?? null}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+            />
           ) : tab === 'governor' ? (
             parsedLog ? (
               <GovernorDashboard limits={parsedLog.governorLimits} metrics={parsedLog.metrics} />

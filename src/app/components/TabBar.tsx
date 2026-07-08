@@ -1,7 +1,7 @@
 import React from 'react';
-import { ListTree, LayoutDashboard, BarChart3, FileText } from 'lucide-react';
+import { ListTree, GanttChartSquare, LayoutDashboard, BarChart3, FileText } from 'lucide-react';
 
-export type MainTab = 'tree' | 'governor' | 'analysis' | 'raw';
+export type MainTab = 'tree' | 'timeline' | 'governor' | 'analysis' | 'raw';
 
 interface Props {
   active: MainTab;
@@ -11,6 +11,7 @@ interface Props {
 
 const TABS: { id: MainTab; label: string; Icon: typeof ListTree }[] = [
   { id: 'tree', label: 'Tree', Icon: ListTree },
+  { id: 'timeline', label: 'Timeline', Icon: GanttChartSquare },
   { id: 'governor', label: 'Governor', Icon: LayoutDashboard },
   { id: 'analysis', label: 'Analysis', Icon: BarChart3 },
   { id: 'raw', label: 'Raw', Icon: FileText },
