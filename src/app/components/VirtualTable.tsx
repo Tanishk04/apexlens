@@ -14,6 +14,23 @@ export interface Column<T> {
   /** Flex-basis width, e.g. 'flex-1', 'w-24'. Defaults to 'flex-1'. */
   width?: string;
   grow?: boolean;
+  /** Show a per-column filter input under the header. */
+  filter?: boolean;
+}
+
+/** Case-insensitive substring filter across the active column filters. */
+export function filterRows<T>(
+  rows: T[],
+  columns: Column<T>[],
+  filters: Record<string, string>,
+): T[] {
+  const active = columns.filter((c) => (filters[c.key] ?? '').trim() !== '');
+  if (active.length === 0) return rows;
+  return rows.filter((row) =>
+    active.every((col) =>
+      String(col.get(row)).toLowerCase().includes(filters[col.key]!.trim().toLowerCase()),
+    ),
+  );
 }
 
 interface VirtualTableProps<T> {
@@ -39,18 +56,22 @@ export function VirtualTable<T>({
   const [dir, setDir] = useState<'asc' | 'desc'>(initialDir);
   // Rows expanded to show full (wrapped) content of the grow column.
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  // Per-column filter values (only columns with `filter: true` render inputs).
+  const [filters, setFilters] = useState<Record<string, string>>({});
+  const hasFilters = columns.some((c) => c.filter);
 
   const sorted = useMemo(() => {
+    const filtered = filterRows(rows, columns, filters);
     const col = columns.find((c) => c.key === sortKey);
-    if (!col) return rows;
+    if (!col) return filtered;
     const factor = dir === 'asc' ? 1 : -1;
-    return [...rows].sort((a, b) => {
+    return [...filtered].sort((a, b) => {
       const va = col.get(a);
       const vb = col.get(b);
       if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * factor;
       return String(va).localeCompare(String(vb)) * factor;
     });
-  }, [rows, columns, sortKey, dir]);
+  }, [rows, columns, sortKey, dir, filters]);
 
   const rowVirtualizer = useVirtualizer({
     count: sorted.length,
@@ -90,7 +111,7 @@ export function VirtualTable<T>({
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* header */}
-      <div className="flex shrink-0 items-center gap-3 border-b border-border bg-card/60 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+      <div className="flex shrink-0 items-center gap-3 border-b border-border bg-card/60 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-foreground/80">
         {columns.map((col) => (
           <button
             key={col.key}
@@ -109,6 +130,27 @@ export function VirtualTable<T>({
           </button>
         ))}
       </div>
+
+      {/* per-column filters */}
+      {hasFilters ? (
+        <div className="flex shrink-0 items-center gap-3 border-b border-border bg-card/40 px-4 py-1">
+          {columns.map((col) => (
+            <div key={col.key} className={`flex ${cellClass(col)}`}>
+              {col.filter ? (
+                <input
+                  type="text"
+                  value={filters[col.key] ?? ''}
+                  onChange={(e) =>
+                    setFilters((prev) => ({ ...prev, [col.key]: e.target.value }))
+                  }
+                  placeholder={`Filter ${col.header.toLowerCase()}…`}
+                  className="w-full max-w-56 rounded border border-border bg-background px-1.5 py-0.5 text-xs text-foreground placeholder:text-muted-foreground/60 focus:border-ring focus:outline-none"
+                />
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       {/* body */}
       {sorted.length === 0 ? (

@@ -25,6 +25,7 @@
     "https://*.visual.force.com/*",
     "https://api.anthropic.com/*",
     "https://api.openai.com/*",
+    "https://openrouter.ai/*",
     "http://localhost/*"
   ],
   "background": {

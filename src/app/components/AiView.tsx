@@ -1,9 +1,9 @@
-import React, { useMemo, useState } from 'react';
-import { Sparkles, Coins, Loader2 } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Sparkles, Coins, Loader2, ExternalLink } from 'lucide-react';
 import type { ParsedDebugLog } from '../../types';
 import type { Analysis } from '../utils/analysis';
 import { buildAiContext, FULL_LOG_CHAR_LIMIT } from '../../ai/context';
-import { PROVIDERS } from '../../ai/adapter';
+import { PROVIDER_META, fetchOpenRouterModels, type ModelOption } from '../../ai/models';
 import { Markdown } from './Markdown';
 
 interface Props {
@@ -12,25 +12,49 @@ interface Props {
   /** The raw log text — sent in full to the provider (user opt-in). */
   rawLog: string | null;
   ai: { loading: boolean; result: string | null; error: string | null };
-  onRun: (providerId: string, apiKey: string, model: string) => void;
+  onRun: (providerId: string, apiKey: string, model: string, baseUrl: string) => void;
 }
 
-const DEFAULT_MODEL: Record<string, string> = {
-  anthropic: 'claude-opus-4-8',
-  openai: 'gpt-4o-mini',
-  ollama: 'llama3.1',
-};
+const CUSTOM_MODEL = '__custom__';
+
+const inputCls =
+  'mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground focus:border-ring focus:outline-none';
 
 export const AiView = ({ log, analysis, rawLog, ai, onRun }: Props) => {
   const [providerId, setProviderId] = useState(
-    () => localStorage.getItem('sfda_ai_provider') ?? 'anthropic',
+    () => localStorage.getItem('sfda_ai_provider') ?? 'openrouter',
   );
   const [apiKey, setApiKey] = useState(
     () => localStorage.getItem(`sfda_ai_key_${providerId}`) ?? '',
   );
-  const [model, setModel] = useState(
-    () => localStorage.getItem('sfda_ai_model') ?? DEFAULT_MODEL['anthropic']!,
+  const [baseUrl, setBaseUrl] = useState(() => localStorage.getItem('sfda_ai_baseurl') ?? '');
+  const [modelChoice, setModelChoice] = useState(
+    () => localStorage.getItem(`sfda_ai_model_${providerId}`) ?? '',
   );
+  const [customModel, setCustomModel] = useState('');
+  const [openRouterModels, setOpenRouterModels] = useState<ModelOption[]>([]);
+
+  const meta = PROVIDER_META.find((p) => p.id === providerId) ?? PROVIDER_META[0]!;
+
+  // Live OpenRouter catalog (cached; static fallback offline).
+  useEffect(() => {
+    if (providerId !== 'openrouter') return;
+    let cancelled = false;
+    fetchOpenRouterModels().then((models) => {
+      if (!cancelled) setOpenRouterModels(models);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [providerId]);
+
+  const options = useMemo<ModelOption[]>(() => {
+    if (providerId === 'openrouter') return openRouterModels;
+    return meta.models.map((id) => ({ id, label: id, free: false }));
+  }, [providerId, openRouterModels, meta]);
+
+  // Effective model: picklist choice, or the custom text input.
+  const model = modelChoice === CUSTOM_MODEL ? customModel : modelChoice || options[0]?.id || '';
 
   // Rough token estimate for the full prompt (raw log + structured summary).
   const tokenEstimate = useMemo(() => {
@@ -46,15 +70,18 @@ export const AiView = ({ log, analysis, rawLog, ai, onRun }: Props) => {
     setProviderId(id);
     localStorage.setItem('sfda_ai_provider', id);
     setApiKey(localStorage.getItem(`sfda_ai_key_${id}`) ?? '');
-    const m = DEFAULT_MODEL[id] ?? '';
-    setModel(m);
-    localStorage.setItem('sfda_ai_model', m);
+    setModelChoice(localStorage.getItem(`sfda_ai_model_${id}`) ?? '');
   };
+
+  const keyMissing = meta.needsKey && !apiKey;
+  const customUrlMissing = providerId === 'custom' && !baseUrl.trim();
+  const disabled = ai.loading || !log || !model || keyMissing || customUrlMissing;
 
   const run = () => {
     localStorage.setItem(`sfda_ai_key_${providerId}`, apiKey);
-    localStorage.setItem('sfda_ai_model', model);
-    onRun(providerId, apiKey, model);
+    localStorage.setItem(`sfda_ai_model_${providerId}`, modelChoice || model);
+    localStorage.setItem('sfda_ai_baseurl', baseUrl);
+    onRun(providerId, apiKey, model, baseUrl);
   };
 
   return (
@@ -62,9 +89,21 @@ export const AiView = ({ log, analysis, rawLog, ai, onRun }: Props) => {
       <div className="mx-auto max-w-3xl space-y-5 p-6">
         {/* config */}
         <section className="rounded-lg border border-border bg-card/40 p-4">
-          <div className="mb-3 flex items-center gap-2">
-            <Sparkles size={16} className="text-debug" />
-            <h2 className="text-sm font-medium text-foreground">AI Log Analysis</h2>
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Sparkles size={16} className="text-vf" />
+              <h2 className="text-sm font-medium text-foreground">AI Log Analysis</h2>
+            </div>
+            {meta.keyUrl ? (
+              <a
+                href={meta.keyUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1 text-xs text-debug hover:underline"
+              >
+                Get a key <ExternalLink size={11} />
+              </a>
+            ) : null}
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -73,34 +112,71 @@ export const AiView = ({ log, analysis, rawLog, ai, onRun }: Props) => {
               <select
                 value={providerId}
                 onChange={(e) => changeProvider(e.target.value)}
-                className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground focus:border-ring focus:outline-none"
+                className={inputCls}
               >
-                {PROVIDERS.map((p) => (
+                {PROVIDER_META.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.label}
                   </option>
                 ))}
               </select>
             </label>
+
             <label className="block text-xs text-muted-foreground">
               Model
-              <input
-                type="text"
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 font-mono text-sm text-foreground focus:border-ring focus:outline-none"
-              />
+              <select
+                value={modelChoice || options[0]?.id || ''}
+                onChange={(e) => setModelChoice(e.target.value)}
+                className={inputCls}
+              >
+                {options.length === 0 && providerId === 'openrouter' ? (
+                  <option value="">Loading models…</option>
+                ) : null}
+                {options.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.label}
+                  </option>
+                ))}
+                <option value={CUSTOM_MODEL}>Custom model id…</option>
+              </select>
             </label>
+
             <label className="block text-xs text-muted-foreground">
-              API key {providerId === 'ollama' ? '(optional for local)' : ''}
+              API key {meta.needsKey ? '' : '(optional)'}
               <input
                 type="password"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 placeholder="sk-…"
-                className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 font-mono text-sm text-foreground focus:border-ring focus:outline-none"
+                className={`${inputCls} font-mono`}
               />
             </label>
+
+            {modelChoice === CUSTOM_MODEL ? (
+              <label className="block text-xs text-muted-foreground">
+                Custom model id
+                <input
+                  type="text"
+                  value={customModel}
+                  onChange={(e) => setCustomModel(e.target.value)}
+                  placeholder="vendor/model-name"
+                  className={`${inputCls} font-mono`}
+                />
+              </label>
+            ) : null}
+
+            {providerId === 'custom' ? (
+              <label className="block text-xs text-muted-foreground sm:col-span-2">
+                Base URL (OpenAI-compatible; server must allow CORS)
+                <input
+                  type="text"
+                  value={baseUrl}
+                  onChange={(e) => setBaseUrl(e.target.value)}
+                  placeholder="https://my-llm.example.com/v1"
+                  className={`${inputCls} font-mono`}
+                />
+              </label>
+            ) : null}
           </div>
 
           <div className="mt-4 flex items-center justify-between gap-3">
@@ -112,7 +188,10 @@ export const AiView = ({ log, analysis, rawLog, ai, onRun }: Props) => {
                 <strong className="text-foreground">
                   ~{tokenEstimate.toLocaleString()} tokens
                 </strong>{' '}
-                of API usage per run.
+                per run.
+                {providerId === 'openrouter'
+                  ? ' Models tagged (free) cost nothing on OpenRouter.'
+                  : ' API tokens will be consumed.'}
                 {clipped
                   ? ' This log exceeds the context budget; the middle section will be clipped.'
                   : ''}{' '}
@@ -122,7 +201,7 @@ export const AiView = ({ log, analysis, rawLog, ai, onRun }: Props) => {
             <button
               type="button"
               onClick={run}
-              disabled={ai.loading || !log || (providerId !== 'ollama' && !apiKey)}
+              disabled={disabled}
               className="flex shrink-0 items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {ai.loading ? (

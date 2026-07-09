@@ -41,15 +41,15 @@ export const GovernorDashboard = ({ limits, metrics }: Props) => {
     <div className="h-full overflow-auto bg-background p-5">
       {/* transaction summary strip */}
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <Stat label="Duration" value={`${Math.round(metrics.durationMs)} ms`} />
-        <Stat label="SOQL" value={metrics.totalSoql} />
-        <Stat label="DML" value={metrics.totalDml} />
-        <Stat label="DML rows" value={metrics.totalDmlRows} />
-        <Stat label="Methods" value={metrics.totalMethods} />
+        <Stat label="Duration" value={`${Math.round(metrics.durationMs)} ms`} color="text-flow" />
+        <Stat label="SOQL" value={metrics.totalSoql} color="text-soql" />
+        <Stat label="DML" value={metrics.totalDml} color="text-dml" />
+        <Stat label="DML rows" value={metrics.totalDmlRows} color="text-dml" />
+        <Stat label="Methods" value={metrics.totalMethods} color="text-method" />
         <Stat
           label="Exceptions"
           value={metrics.exceptionCount}
-          danger={metrics.exceptionCount > 0}
+          color={metrics.exceptionCount > 0 ? 'text-error' : 'text-soql'}
         />
       </div>
 
@@ -79,18 +79,16 @@ export const GovernorDashboard = ({ limits, metrics }: Props) => {
 function Stat({
   label,
   value,
-  danger,
+  color = 'text-foreground',
 }: {
   label: string;
   value: React.ReactNode;
-  danger?: boolean;
+  color?: string;
 }) {
   return (
     <div className="rounded-lg border border-border bg-card/40 px-3 py-2">
       <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className={`mt-0.5 font-mono text-lg ${danger ? 'text-error' : 'text-foreground'}`}>
-        {value}
-      </div>
+      <div className={`mt-0.5 font-mono text-lg ${color}`}>{value}</div>
     </div>
   );
 }

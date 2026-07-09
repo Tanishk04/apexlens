@@ -85,7 +85,21 @@ export function openAiCompatibleProvider(
 }
 
 export const PROVIDERS: AiProvider[] = [
+  openAiCompatibleProvider('https://openrouter.ai/api/v1', 'openrouter', 'OpenRouter (free models)'),
   anthropicProvider,
-  openAiCompatibleProvider(),
+  openAiCompatibleProvider('https://api.openai.com/v1', 'openai', 'ChatGPT (OpenAI)'),
   openAiCompatibleProvider('http://localhost:11434/v1', 'ollama', 'Ollama (local)'),
 ];
+
+/**
+ * Resolve a provider by id. `custom` builds an OpenAI-compatible adapter for a
+ * user-supplied base URL (self-hosted, LM Studio, enterprise proxies, …).
+ */
+export function getProvider(id: string, customBaseUrl?: string): AiProvider | undefined {
+  if (id === 'custom') {
+    const base = (customBaseUrl ?? '').replace(/\/$/, '');
+    if (!base) return undefined;
+    return openAiCompatibleProvider(base, 'custom', 'Custom endpoint');
+  }
+  return PROVIDERS.find((p) => p.id === id);
+}

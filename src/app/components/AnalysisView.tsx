@@ -19,6 +19,7 @@ const soqlColumns: Column<SoqlRow>[] = [
     get: (r) => r.query,
     grow: true,
     mono: true,
+    filter: true,
     render: (r) => (
       <>
         {r.inLoop ? (
@@ -100,9 +101,8 @@ const flowColumns: Column<FlowRow>[] = [
 ];
 
 const methodColumns: Column<MethodRow>[] = [
-  { key: 'name', header: 'Name', get: (r) => r.name, grow: true, mono: true },
-  { key: 'type', header: 'Type', get: (r) => r.type, width: 'w-28' },
-  { key: 'namespace', header: 'Namespace', get: (r) => r.namespace, width: 'w-28' },
+  { key: 'name', header: 'Name', get: (r) => r.name, grow: true, mono: true, filter: true },
+  { key: 'type', header: 'Type', get: (r) => r.type, width: 'w-28', filter: true },
   { key: 'count', header: 'Count', get: (r) => r.count, align: 'right', mono: true, width: 'w-20' },
   {
     key: 'totalMs',

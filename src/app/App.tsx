@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AlertCircle } from 'lucide-react';
 import { VirtualTree } from './components/VirtualTree';
@@ -24,7 +24,7 @@ import { CommandPalette, type Command as PaletteCommand } from './components/Com
 import { analyze } from './utils/analysis';
 import { useTheme } from './utils/theme';
 import { buildAiContext, buildFullPrompt } from '../ai/context';
-import { PROVIDERS } from '../ai/adapter';
+import { getProvider } from '../ai/adapter';
 import {
   flattenEventLines,
   flattenExecutionTree,
@@ -76,8 +76,8 @@ const App = () => {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [theme, toggleTheme] = useTheme();
 
-  // In-app Find (Ctrl/Cmd+F).
-  const [findOpen, setFindOpen] = useState(false);
+  // In-app Find (Ctrl/Cmd+F). Open state is PER TAB; query/case are shared.
+  const [findTabs, setFindTabs] = useState<Set<MainTab>>(new Set());
   const [findQuery, setFindQuery] = useState('');
   const [findCase, setFindCase] = useState(false);
   const [findIndex, setFindIndex] = useState(0);
@@ -186,9 +186,9 @@ const App = () => {
 
   /** One-shot whole-log AI analysis: full raw log + structured summary. */
   const runAi = useCallback(
-    async (providerId: string, apiKey: string, model: string) => {
+    async (providerId: string, apiKey: string, model: string, baseUrl: string) => {
       if (!parsedLog || rawLog == null) return;
-      const provider = PROVIDERS.find((p) => p.id === providerId);
+      const provider = getProvider(providerId, baseUrl);
       if (!provider) return;
       setAi({ loading: true, result: null, error: null });
       try {
@@ -261,13 +261,35 @@ const App = () => {
         e.preventDefault();
         setPaletteOpen((o) => !o);
       } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') {
-        // Replace the browser's find with the in-app one.
+        // Replace the browser's find with the in-app one (opens on current tab).
         e.preventDefault();
-        setFindOpen(true);
+        setFindTabs((prev) => {
+          const next = new Set(prev);
+          next.add(tabRef.current);
+          return next;
+        });
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  // Current tab, readable from the stable keydown handler.
+  const tabRef = useRef(tab);
+  tabRef.current = tab;
+
+  // Reset the active match when switching tabs (match lists differ per view).
+  useEffect(() => {
+    setFindIndex(0);
+  }, [tab]);
+
+  const findOpen = findTabs.has(tab);
+  const closeFind = useCallback(() => {
+    setFindTabs((prev) => {
+      const next = new Set(prev);
+      next.delete(tabRef.current);
+      return next;
+    });
   }, []);
 
   const findSupported = tab === 'explorer' || tab === 'rawtree' || tab === 'tree';
@@ -308,7 +330,17 @@ const App = () => {
       go('governor', 'Governor'),
       go('summary', 'Summary'),
       { id: 'tab-ai', label: 'Analyze log with AI', hint: 'ai', run: () => setTab('ai') },
-      { id: 'find', label: 'Find in log', hint: 'Ctrl F', run: () => setFindOpen(true) },
+      {
+        id: 'find',
+        label: 'Find in log',
+        hint: 'Ctrl F',
+        run: () =>
+          setFindTabs((prev) => {
+            const next = new Set(prev);
+            next.add(tabRef.current);
+            return next;
+          }),
+      },
       { id: 'theme', label: 'Toggle light/dark theme', hint: 'view', run: toggleTheme },
       { id: 'expand', label: 'Expand all', hint: 'tree', run: expandAll },
       { id: 'collapse', label: 'Collapse all', hint: 'tree', run: collapseAll },
@@ -418,7 +450,7 @@ const App = () => {
           }}
           onNext={findNext}
           onPrev={findPrev}
-          onClose={() => setFindOpen(false)}
+          onClose={closeFind}
         />
         <div className="min-h-0 min-w-0 flex-1">
           {tab === 'tree' ? (

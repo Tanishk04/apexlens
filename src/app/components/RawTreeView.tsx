@@ -185,7 +185,7 @@ export const RawTreeView = ({ lines, find, onMatches, theme }: Props) => {
                   {row.lineNumber ? (
                     <span className="shrink-0 text-muted-foreground/70">[{row.lineNumber}]</span>
                   ) : null}
-                  <span>{highlight(row.payload, 'text-muted-foreground', isActive)}</span>
+                  <span>{highlight(row.payload, 'text-foreground', isActive)}</span>
                 </div>
               );
             })}

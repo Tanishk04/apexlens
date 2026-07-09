@@ -108,7 +108,7 @@ export const LogExplorerView = ({ rawLog, find, onMatches, theme }: Props) => {
                 }`}
               >
                 <span
-                  className="sticky left-0 shrink-0 select-none border-r border-border bg-background pr-2 text-right text-muted-foreground/60"
+                  className="sticky left-0 shrink-0 select-none border-r border-border bg-background pr-2 text-right text-muted-foreground/80"
                   style={{ minWidth: `${numWidth + 2}ch`, paddingLeft: '0.5ch' }}
                 >
                   {vr.index + 1}

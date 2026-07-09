@@ -57,7 +57,7 @@ export const FindBar = ({
   };
 
   return (
-    <div className="absolute right-4 top-2 z-40 flex items-center gap-1 rounded-md border border-border bg-card px-2 py-1 shadow-lg">
+    <div className="absolute right-24 top-1.5 z-40 flex items-center gap-0.5 rounded-md border border-border bg-card px-1.5 py-0.5 text-xs shadow-md">
       <input
         ref={inputRef}
         type="text"
@@ -65,46 +65,48 @@ export const FindBar = ({
         onChange={(e) => onQuery(e.target.value)}
         onKeyDown={onKeyDown}
         placeholder="Find"
-        className="w-44 bg-transparent px-1 py-0.5 text-sm text-foreground placeholder:text-muted-foreground/70 focus:outline-none"
+        className="w-32 bg-transparent px-1 py-0.5 text-xs text-foreground placeholder:text-muted-foreground/70 focus:outline-none"
       />
       <button
         type="button"
         onClick={onToggleCase}
         title="Match case"
-        className={`rounded p-1 ${
+        className={`rounded p-0.5 ${
           caseSensitive
             ? 'bg-accent text-foreground'
             : 'text-muted-foreground hover:bg-accent hover:text-foreground'
         }`}
       >
-        <CaseSensitive size={14} />
+        <CaseSensitive size={13} />
       </button>
-      <span className="min-w-16 px-1 text-center text-xs text-muted-foreground">{counter}</span>
+      <span className="min-w-14 px-0.5 text-center text-[11px] text-muted-foreground">
+        {counter}
+      </span>
       <button
         type="button"
         onClick={onPrev}
         disabled={matchCount === 0}
         title="Previous match (Shift+Enter)"
-        className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"
+        className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"
       >
-        <ChevronUp size={14} />
+        <ChevronUp size={13} />
       </button>
       <button
         type="button"
         onClick={onNext}
         disabled={matchCount === 0}
         title="Next match (Enter)"
-        className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"
+        className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"
       >
-        <ChevronDown size={14} />
+        <ChevronDown size={13} />
       </button>
       <button
         type="button"
         onClick={onClose}
         title="Close (Esc)"
-        className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+        className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
       >
-        <X size={14} />
+        <X size={13} />
       </button>
     </div>
   );
