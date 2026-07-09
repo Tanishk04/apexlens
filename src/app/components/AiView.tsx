@@ -86,9 +86,9 @@ export const AiView = ({ log, analysis, rawLog, ai, onRun }: Props) => {
 
   return (
     <div className="h-full overflow-auto bg-background">
-      <div className="mx-auto max-w-3xl space-y-5 p-6">
-        {/* config */}
-        <section className="rounded-lg border border-border bg-card/40 p-4">
+      <div className="w-full space-y-5 p-6">
+        {/* config (form kept to a readable width; result spans full width) */}
+        <section className="max-w-3xl rounded-lg border border-border bg-card/40 p-4">
           <div className="mb-3 flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <Sparkles size={16} className="text-vf" />

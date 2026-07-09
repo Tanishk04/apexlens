@@ -39,6 +39,9 @@ import { SAMPLE_LOG } from './sampleLog';
 import type { ParsedDebugLog } from '../types';
 import '../index.css';
 
+// Tabs where in-app Find (Ctrl/Cmd+F) is available.
+const FIND_TABS = new Set<MainTab>(['explorer', 'rawtree', 'tree']);
+
 // Preferred order for the filter chips.
 const TYPE_ORDER = [
   'CODE_UNIT',
@@ -261,11 +264,14 @@ const App = () => {
         e.preventDefault();
         setPaletteOpen((o) => !o);
       } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') {
-        // Replace the browser's find with the in-app one (opens on current tab).
+        // In-app find only on searchable tabs; elsewhere let the browser's
+        // native find work. On a supported tab, Ctrl+F toggles the bar.
+        if (!FIND_TABS.has(tabRef.current)) return;
         e.preventDefault();
         setFindTabs((prev) => {
           const next = new Set(prev);
-          next.add(tabRef.current);
+          if (next.has(tabRef.current)) next.delete(tabRef.current);
+          else next.add(tabRef.current);
           return next;
         });
       }
@@ -292,7 +298,7 @@ const App = () => {
     });
   }, []);
 
-  const findSupported = tab === 'explorer' || tab === 'rawtree' || tab === 'tree';
+  const findSupported = FIND_TABS.has(tab);
   const find = useMemo(
     () => ({ query: findOpen && findSupported ? findQuery : '', caseSensitive: findCase, index: findIndex }),
     [findOpen, findSupported, findQuery, findCase, findIndex],
@@ -334,12 +340,12 @@ const App = () => {
         id: 'find',
         label: 'Find in log',
         hint: 'Ctrl F',
-        run: () =>
-          setFindTabs((prev) => {
-            const next = new Set(prev);
-            next.add(tabRef.current);
-            return next;
-          }),
+        run: () => {
+          // Ensure we're on a searchable tab, then open the find bar there.
+          const target = FIND_TABS.has(tabRef.current) ? tabRef.current : 'explorer';
+          setTab(target);
+          setFindTabs((prev) => new Set(prev).add(target));
+        },
       },
       { id: 'theme', label: 'Toggle light/dark theme', hint: 'view', run: toggleTheme },
       { id: 'expand', label: 'Expand all', hint: 'tree', run: expandAll },
@@ -433,25 +439,26 @@ const App = () => {
 
       {parsedLog ? (
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-        <FindBar
-          open={findOpen}
-          query={findQuery}
-          caseSensitive={findCase}
-          matchCount={findSupported ? matchCount : 0}
-          index={findIndex}
-          supported={findSupported}
-          onQuery={(q) => {
-            setFindQuery(q);
-            setFindIndex(0);
-          }}
-          onToggleCase={() => {
-            setFindCase((c) => !c);
-            setFindIndex(0);
-          }}
-          onNext={findNext}
-          onPrev={findPrev}
-          onClose={closeFind}
-        />
+        {findSupported ? (
+          <FindBar
+            open={findOpen}
+            query={findQuery}
+            caseSensitive={findCase}
+            matchCount={matchCount}
+            index={findIndex}
+            onQuery={(q) => {
+              setFindQuery(q);
+              setFindIndex(0);
+            }}
+            onToggleCase={() => {
+              setFindCase((c) => !c);
+              setFindIndex(0);
+            }}
+            onNext={findNext}
+            onPrev={findPrev}
+            onClose={closeFind}
+          />
+        ) : null}
         <div className="min-h-0 min-w-0 flex-1">
           {tab === 'tree' ? (
             treeNodes.length > 0 ? (

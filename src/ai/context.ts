@@ -103,17 +103,12 @@ export interface AiPrompt {
 
 /** System + user prompt for the summary-only diagnosis request. */
 export function buildPrompt(context: AiContext): AiPrompt {
-  const system =
-    'You are a Salesforce Apex performance and debugging expert. You are given a ' +
-    'STRUCTURED summary of a Salesforce debug log (never the raw log). Diagnose the ' +
-    'most likely root cause of any failure, call out governor-limit and performance ' +
-    'risks (SOQL in loops, slow methods, high DML), and give concrete, prioritized ' +
-    'fixes. Be concise and use short markdown sections.';
   const user =
     'Here is the structured debug-log summary as JSON:\n\n```json\n' +
     JSON.stringify(context, null, 2) +
-    '\n```\n\nDiagnose what happened and how to fix it.';
-  return { system, user };
+    '\n```\n\n' +
+    OUTPUT_FORMAT;
+  return { system: AI_SYSTEM_PROMPT, user };
 }
 
 /**
@@ -130,14 +125,7 @@ const TAIL_CHARS = 100_000;
  * The user opted in to sending the whole log (token cost shown in the UI).
  */
 export function buildFullPrompt(rawLog: string, context: AiContext): AiPrompt {
-  const system =
-    'You are a Salesforce Apex performance and debugging expert. You receive a ' +
-    'structured summary of a debug log followed by the raw debug log itself. ' +
-    'Read the ENTIRE log, then diagnose: root cause of any failure, governor-limit ' +
-    'risks, performance problems (SOQL in loops, recursive triggers, slow methods, ' +
-    'high DML), and concrete prioritized fixes referencing specific lines, methods ' +
-    'and queries from the log. Be specific — quote the relevant log lines. Use ' +
-    'short markdown sections.';
+  const system = AI_SYSTEM_PROMPT;
 
   let logSection: string;
   if (rawLog.length > FULL_LOG_CHAR_LIMIT) {
@@ -156,6 +144,40 @@ export function buildFullPrompt(rawLog: string, context: AiContext): AiPrompt {
     JSON.stringify(context, null, 2) +
     '\n```\n\nComplete raw debug log:\n\n```\n' +
     logSection +
-    '\n```\n\nDiagnose what happened and how to fix it.';
+    '\n```\n\n' +
+    OUTPUT_FORMAT;
   return { system, user };
 }
+
+/**
+ * Guardrailed system prompt. Priorities: report only what the log shows, adapt
+ * depth to severity, never dump code, and clearly say when nothing is wrong.
+ */
+export const AI_SYSTEM_PROMPT =
+  'You are a senior Salesforce Apex debugging and performance expert. You receive a structured ' +
+  'summary of a debug log followed by the raw debug log. Read the ENTIRE log, then report ONLY ' +
+  'what the log actually demonstrates.\n\n' +
+  'STRICT RULES:\n' +
+  '1. Adapt depth to severity. If there is NO exception, NO governor limit at or above 50% of its ' +
+  'allocation, and NO clearly dominant performance bottleneck, respond with just a "## Verdict" ' +
+  'section containing "✅ No issues found" and a one- or two-line summary, then STOP. Nothing else.\n' +
+  '2. Never speculate or future-proof. Do NOT invent hypothetical risks ("if this ran in bulk…", ' +
+  '"if called on many records…"). Do NOT comment on code you cannot see. Only flag what is in the log.\n' +
+  '3. Report a limit only if it is genuinely elevated (≥50% used). Report a performance issue only ' +
+  'if a method or query truly dominates the transaction and is worth acting on. Omit any section ' +
+  'that has nothing to report — do not pad.\n' +
+  '4. NEVER output code, pseudo-code, SOQL rewrites, or before/after snippets. Describe fixes in ' +
+  'plain prose and point to the specific log line, method, or query. No fenced code blocks.\n' +
+  '5. When you DO flag something, be specific and cite the exact line number / method / query from ' +
+  'the log. Be concise. No filler, no praise, no restating these instructions.';
+
+/** Output skeleton appended to the user message for consistent formatting. */
+const OUTPUT_FORMAT =
+  'Respond in GitHub-flavored markdown using ONLY these sections, in this order, and OMIT any ' +
+  'section that has no real content:\n\n' +
+  '## Verdict\n(✅ No issues found / ⚠️ Minor concerns / ❌ Failure) — one line.\n\n' +
+  '## What happened\n(1–3 lines, only if noteworthy.)\n\n' +
+  '## Governor limits\n(Only if a limit is ≥50% used. A short table or bullets.)\n\n' +
+  '## Performance\n(Only if a method or query genuinely dominates. Cite line/method.)\n\n' +
+  '## Recommended fixes\n(Only if there ARE fixes. Numbered, prose only, no code.)\n\n' +
+  'If the log is healthy, output ONLY the Verdict section.';

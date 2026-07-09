@@ -8,7 +8,6 @@ interface Props {
   matchCount: number;
   /** 0-based active match index. */
   index: number;
-  supported: boolean;
   onQuery: (q: string) => void;
   onToggleCase: () => void;
   onNext: () => void;
@@ -23,7 +22,6 @@ export const FindBar = ({
   caseSensitive,
   matchCount,
   index,
-  supported,
   onQuery,
   onToggleCase,
   onNext,
@@ -38,13 +36,7 @@ export const FindBar = ({
 
   if (!open) return null;
 
-  const counter = !supported
-    ? 'Not searchable here'
-    : !query
-      ? ''
-      : matchCount === 0
-        ? 'No results'
-        : `${index + 1} of ${matchCount}`;
+  const counter = !query ? '' : matchCount === 0 ? 'No results' : `${index + 1} of ${matchCount}`;
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
