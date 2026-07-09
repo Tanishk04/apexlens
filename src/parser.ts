@@ -302,6 +302,43 @@ export class TreeBuilder {
     }
     this.root.timestamp = this.firstTs < 0 ? 0 : this.firstTs;
     this.root.durationNs = this.firstTs < 0 ? 0 : this.lastTs - this.firstTs;
+    this.rollup(this.root);
+  }
+
+  /**
+   * Post-order rollup of per-node metrics: self time (total minus direct
+   * execution-node children) and subtree totals for SOQL/DML counts and rows.
+   */
+  private rollup(node: ExecutionNode): void {
+    let childTotalNs = 0;
+    let soql = 0;
+    let dml = 0;
+    let dmlRows = 0;
+    let soqlRows = 0;
+
+    if (node.type === 'SOQL' || node.type === 'SOSL') {
+      soql = 1;
+      soqlRows = node.soqlRows ?? 0;
+    } else if (node.type === 'DML') {
+      dml = 1;
+      dmlRows = node.dmlRows ?? 0;
+    }
+
+    for (const child of node.children) {
+      if (!('children' in child)) continue;
+      this.rollup(child);
+      childTotalNs += child.durationNs;
+      soql += child.totSoql ?? 0;
+      dml += child.totDml ?? 0;
+      dmlRows += child.totDmlRows ?? 0;
+      soqlRows += child.totSoqlRows ?? 0;
+    }
+
+    node.selfNs = Math.max(0, node.durationNs - childTotalNs);
+    node.totSoql = soql;
+    node.totDml = dml;
+    node.totDmlRows = dmlRows;
+    node.totSoqlRows = soqlRows;
   }
 
   public getRoot(): ExecutionNode {

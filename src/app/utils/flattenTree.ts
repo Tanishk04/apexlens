@@ -13,6 +13,11 @@ export interface FlatTreeNode {
   expandable: boolean;
   /** True when currently collapsed (children hidden). */
   collapsed: boolean;
+  // Rollup metrics (subtree totals; 0 = hide in UI).
+  selfMs: number;
+  totSoql: number;
+  totDml: number;
+  totRows: number;
 }
 
 interface FlattenOptions {
@@ -77,6 +82,10 @@ export function flattenExecutionTree(
           event: node.event,
           expandable: hasVisibleChildren,
           collapsed: isCollapsed,
+          selfMs: Math.round((node.selfNs ?? 0) / 1_000_000),
+          totSoql: node.totSoql ?? 0,
+          totDml: node.totDml ?? 0,
+          totRows: (node.totDmlRows ?? 0) + (node.totSoqlRows ?? 0),
         });
       }
 
@@ -98,6 +107,10 @@ export function flattenExecutionTree(
       event: node.event,
       expandable: false,
       collapsed: false,
+      selfMs: 0,
+      totSoql: 0,
+      totDml: 0,
+      totRows: 0,
     });
   }
 
@@ -177,6 +190,10 @@ export function flattenEventLines(
       event: line.event,
       expandable: false,
       collapsed: false,
+      selfMs: 0,
+      totSoql: 0,
+      totDml: 0,
+      totRows: 0,
     }))
     .filter(
       (row) =>

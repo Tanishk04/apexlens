@@ -1,20 +1,23 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { AlertCircle, Download, Command } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Download, Command, FolderOpen } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { VirtualTree } from './components/VirtualTree';
 import { FilterBar } from './components/FilterBar';
-import { Inspector } from './components/Inspector';
+import { DetailPanel } from './components/DetailPanel';
 import { TabBar, type MainTab } from './components/TabBar';
 import { GovernorDashboard } from './components/GovernorDashboard';
 import { AnalysisView } from './components/AnalysisView';
 import { RawLogView } from './components/RawLogView';
+import { RawTreeView } from './components/RawTreeView';
+import { DebugView } from './components/DebugView';
+import { AiView } from './components/AiView';
 import { Timeline } from './components/Timeline';
 import { CommandPalette, type Command as PaletteCommand } from './components/CommandPalette';
 import { analyze } from './utils/analysis';
 import { toMarkdown, downloadText } from './utils/exportMarkdown';
 import { buildAiContext } from '../ai/context';
-import { anthropicProvider } from '../ai/adapter';
+import { PROVIDERS } from '../ai/adapter';
 import {
   flattenEventLines,
   flattenExecutionTree,
@@ -162,32 +165,63 @@ const App = () => {
     [parentMap, nodeIndex],
   );
 
-  const explainWithAI = useCallback(async () => {
-    if (!parsedLog) return;
-    let key = localStorage.getItem('sfda_anthropic_key');
-    if (!key) {
-      key = window.prompt('Enter your Anthropic API key (stored locally, never uploaded):');
-      if (!key) return;
-      localStorage.setItem('sfda_anthropic_key', key);
-    }
-    setAi({ loading: true, result: null, error: null });
+  /** One-shot whole-log analysis: structured summary only, never the raw log. */
+  const runAi = useCallback(
+    async (providerId: string, apiKey: string, model: string) => {
+      if (!parsedLog) return;
+      const provider = PROVIDERS.find((p) => p.id === providerId);
+      if (!provider) return;
+      setAi({ loading: true, result: null, error: null });
+      try {
+        const context = buildAiContext(parsedLog, analysis);
+        const result = await provider.explain(context, apiKey, model || undefined);
+        setAi({ loading: false, result, error: null });
+      } catch (err) {
+        setAi({
+          loading: false,
+          result: null,
+          error: err instanceof Error ? err.message : 'AI request failed',
+        });
+      }
+    },
+    [parsedLog, analysis],
+  );
+
+  /** Open a local .log file (works in dev and in the extension tab). */
+  const openLogFile = useCallback(async (file: File) => {
+    setLoading(true);
+    setError(null);
+    setAi({ loading: false, result: null, error: null });
+    setSelectedId(null);
+    setCollapsed(new Set());
     try {
-      const context = buildAiContext(parsedLog, analysis);
-      const result = await anthropicProvider.explain(context, key);
-      setAi({ loading: false, result, error: null });
+      const body = await file.text();
+      const parsed = await parseLogInWorker(body);
+      setParsedLog(parsed);
+      if (parsed.exceptions.length > 0) {
+        setSelectedId(parsed.exceptions[0]!.id);
+        setScrollToId(parsed.exceptions[0]!.id);
+      }
     } catch (err) {
-      setAi({
-        loading: false,
-        result: null,
-        error: err instanceof Error ? err.message : 'AI request failed',
-      });
+      setError(err instanceof Error ? err.message : 'Failed to parse log file');
+    } finally {
+      setLoading(false);
     }
-  }, [parsedLog, analysis]);
+  }, []);
 
   const exportMarkdown = useCallback(() => {
     if (!parsedLog) return;
     downloadText('salesforce-debug-log.md', toMarkdown(parsedLog, analysis));
   }, [parsedLog, analysis]);
+
+  /** Header "Errors" chip: reveal the next exception, cycling through them. */
+  const jumpToNextException = useCallback(() => {
+    const exceptions = parsedLog?.exceptions ?? [];
+    if (exceptions.length === 0) return;
+    const current = exceptions.findIndex((e) => e.id === selectedId);
+    const next = exceptions[(current + 1) % exceptions.length]!;
+    revealNode(next.id);
+  }, [parsedLog, selectedId, revealNode]);
 
   const toggleNode = (id: string) =>
     setCollapsed((prev) => {
@@ -226,12 +260,14 @@ const App = () => {
       { id: 'tab-timeline', label: 'Go to Timeline', hint: 'view', run: () => setTab('timeline') },
       { id: 'tab-governor', label: 'Go to Governor', hint: 'view', run: () => setTab('governor') },
       { id: 'tab-analysis', label: 'Go to Analysis', hint: 'view', run: () => setTab('analysis') },
-      { id: 'tab-raw', label: 'Go to Raw log', hint: 'view', run: () => setTab('raw') },
+      { id: 'tab-debug', label: 'Go to Apex Debug', hint: 'view', run: () => setTab('debug') },
+      { id: 'tab-rawtree', label: 'Go to Raw Tree', hint: 'view', run: () => setTab('rawtree') },
+      { id: 'tab-explorer', label: 'Go to Log Explorer', hint: 'view', run: () => setTab('explorer') },
+      { id: 'tab-ai', label: 'Analyze log with AI', hint: 'ai', run: () => setTab('ai') },
       { id: 'expand', label: 'Expand all', hint: 'tree', run: expandAll },
       { id: 'collapse', label: 'Collapse all', hint: 'tree', run: collapseAll },
       { id: 'clear', label: 'Clear type filters', hint: 'filter', run: () => setActiveTypes(new Set()) },
       { id: 'export', label: 'Export report as Markdown', hint: 'export', run: exportMarkdown },
-      { id: 'ai', label: 'Explain log with AI', hint: 'ai', run: explainWithAI },
     ];
     const exceptions = parsedLog?.exceptions ?? [];
     exceptions.forEach((ex, i) => {
@@ -244,7 +280,7 @@ const App = () => {
     });
     return cmds;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [parsedLog, exportMarkdown, explainWithAI, revealNode]);
+  }, [parsedLog, exportMarkdown, revealNode]);
 
   if (loading) {
     return (
@@ -288,11 +324,36 @@ const App = () => {
                 <span>DML {m.totalDml}</span>
                 <span>Rows {m.totalDmlRows}</span>
                 {m.cpuTimeMs > 0 ? <span>CPU {m.cpuTimeMs}ms</span> : null}
-                <span className={m.exceptionCount > 0 ? 'text-red-400' : ''}>
-                  Errors {m.exceptionCount}
-                </span>
+                {m.exceptionCount > 0 ? (
+                  <button
+                    type="button"
+                    onClick={jumpToNextException}
+                    title="Jump to next exception"
+                    className="flex items-center gap-1 rounded-md bg-red-500/10 px-2 py-1 font-medium text-red-400 hover:bg-red-500/20"
+                  >
+                    <AlertTriangle size={12} /> Errors {m.exceptionCount}
+                  </button>
+                ) : (
+                  <span>Errors 0</span>
+                )}
               </>
             ) : null}
+            <label
+              title="Open a downloaded .log file"
+              className="flex cursor-pointer items-center gap-1 rounded-md border border-zinc-800 px-2 py-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+            >
+              <FolderOpen size={13} /> Open log
+              <input
+                type="file"
+                accept=".log,.txt"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) openLogFile(file);
+                  e.target.value = '';
+                }}
+              />
+            </label>
             <button
               type="button"
               onClick={exportMarkdown}
@@ -339,46 +400,54 @@ const App = () => {
           />
         ) : null}
 
-        <div className="min-h-0 min-w-0 flex-1">
-          {tab === 'tree' ? (
-            treeNodes.length > 0 ? (
-              <VirtualTree
-                nodes={treeNodes}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div className="min-h-0 min-w-0 flex-1">
+            {tab === 'tree' ? (
+              treeNodes.length > 0 ? (
+                <VirtualTree
+                  nodes={treeNodes}
+                  selectedId={selectedId}
+                  onSelect={setSelectedId}
+                  onToggle={toggleNode}
+                  scrollToId={scrollToId}
+                />
+              ) : (
+                <div className="flex h-full items-center justify-center text-sm text-zinc-500">
+                  No events match the current filters.
+                </div>
+              )
+            ) : tab === 'timeline' ? (
+              <Timeline
+                root={parsedLog?.executionTree ?? null}
                 selectedId={selectedId}
                 onSelect={setSelectedId}
-                onToggle={toggleNode}
-                scrollToId={scrollToId}
               />
+            ) : tab === 'governor' ? (
+              parsedLog ? (
+                <GovernorDashboard limits={parsedLog.governorLimits} metrics={parsedLog.metrics} />
+              ) : null
+            ) : tab === 'analysis' ? (
+              <AnalysisView analysis={analysis} />
+            ) : tab === 'debug' ? (
+              <DebugView lines={parsedLog?.eventLines ?? []} />
+            ) : tab === 'rawtree' ? (
+              <RawTreeView lines={parsedLog?.eventLines ?? []} />
+            ) : tab === 'ai' ? (
+              <AiView log={parsedLog} analysis={analysis} ai={ai} onRun={runAi} />
             ) : (
-              <div className="flex h-full items-center justify-center text-sm text-zinc-500">
-                No events match the current filters.
-              </div>
-            )
-          ) : tab === 'timeline' ? (
-            <Timeline
-              root={parsedLog?.executionTree ?? null}
-              selectedId={selectedId}
-              onSelect={setSelectedId}
+              <RawLogView lines={parsedLog?.eventLines ?? []} />
+            )}
+          </div>
+
+          {(tab === 'tree' || tab === 'timeline') && selected ? (
+            <DetailPanel
+              selected={selected}
+              exception={parsedLog?.exceptions.find((e) => e.id === selectedId) ?? null}
+              onClose={() => setSelectedId(null)}
             />
-          ) : tab === 'governor' ? (
-            parsedLog ? (
-              <GovernorDashboard limits={parsedLog.governorLimits} metrics={parsedLog.metrics} />
-            ) : null
-          ) : tab === 'analysis' ? (
-            <AnalysisView analysis={analysis} />
-          ) : (
-            <RawLogView lines={parsedLog?.eventLines ?? []} />
-          )}
+          ) : null}
         </div>
       </main>
-
-      <Inspector
-        selected={selected}
-        exceptions={parsedLog?.exceptions ?? []}
-        onSelectException={revealNode}
-        onExplain={explainWithAI}
-        ai={ai}
-      />
 
       <CommandPalette
         open={paletteOpen}

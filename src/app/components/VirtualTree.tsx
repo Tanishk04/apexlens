@@ -77,7 +77,18 @@ export const VirtualTree = ({
   }, [scrollToId, nodes]);
 
   return (
-    <div ref={parentRef} className="h-full min-h-0 w-full overflow-auto bg-zinc-950">
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex shrink-0 items-center border-b border-zinc-800 bg-zinc-900/60 py-1 pl-3 pr-3 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+        <span>Event</span>
+        <div className="ml-auto flex shrink-0 font-mono normal-case">
+          <span className="w-12 text-right">SOQL</span>
+          <span className="w-12 text-right">DML</span>
+          <span className="w-12 text-right">Rows</span>
+          <span className="w-16 text-right">Total</span>
+          <span className="w-16 text-right">Self</span>
+        </div>
+      </div>
+      <div ref={parentRef} className="min-h-0 w-full flex-1 overflow-auto bg-zinc-950">
       <div
         style={{
           height: `${rowVirtualizer.getTotalSize()}px`,
@@ -159,19 +170,35 @@ export const VirtualTree = ({
                 <span className="shrink-0 text-xs text-zinc-600">:{node.lineNumber}</span>
               ) : null}
 
-              {node.durationMs > 0 ? (
+              {/* metric columns (sticky right so they stay visible on h-scroll) */}
+              <div className="sticky right-0 ml-auto flex shrink-0 items-center gap-0 bg-zinc-950/90 pl-2 font-mono text-xs">
+                <Metric value={node.totSoql} className="text-green-500" />
+                <Metric value={node.totDml} className="text-emerald-500" />
+                <Metric value={node.totRows} className="text-zinc-400" />
+                <span className="w-16 text-right text-zinc-500">
+                  {node.durationMs > 0 ? `${node.durationMs}ms` : ''}
+                </span>
                 <span
-                  className={`ml-auto shrink-0 rounded px-1.5 font-mono text-xs ${
-                    isSlow ? 'bg-yellow-500/10 text-yellow-500' : 'text-zinc-500'
+                  className={`w-16 rounded text-right ${
+                    isSlow ? 'bg-yellow-500/10 px-1 text-yellow-500' : 'text-zinc-600'
                   }`}
                 >
-                  {node.durationMs}ms
+                  {node.selfMs > 0 ? `${node.selfMs}ms` : ''}
                 </span>
-              ) : null}
+              </div>
             </div>
           );
         })}
       </div>
+      </div>
     </div>
   );
 };
+
+function Metric({ value, className }: { value: number; className: string }) {
+  return (
+    <span className={`w-12 text-right ${value > 0 ? className : 'text-transparent'}`}>
+      {value > 0 ? value : '·'}
+    </span>
+  );
+}

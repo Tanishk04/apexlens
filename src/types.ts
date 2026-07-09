@@ -74,6 +74,18 @@ export interface ExecutionNode {
   /** Set true if this node was force-closed at EOF (truncated / missing exit). */
   unclosed?: boolean;
 
+  // Rollup metrics (computed post-parse; totals include all descendants).
+  /** Wall time minus direct execution-node children (ns). */
+  selfNs?: number;
+  /** Total SOQL/SOSL executions in this subtree. */
+  totSoql?: number;
+  /** Total DML operations in this subtree. */
+  totDml?: number;
+  /** Total DML rows in this subtree. */
+  totDmlRows?: number;
+  /** Total SOQL/SOSL rows returned in this subtree. */
+  totSoqlRows?: number;
+
   soql?: string;
   soqlRows?: number;
   dmlAction?: string;

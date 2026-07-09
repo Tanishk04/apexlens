@@ -107,14 +107,14 @@ export const NOISE_EVENTS: Set<string> = new Set([
 ]);
 
 export function isEntryEvent(event: string): boolean {
-  if (NON_PAIR_EVENTS.has(event)) return false;
+  if (NON_PAIR_EVENTS.has(event) || NOISE_EVENTS.has(event)) return false;
   if (event in ENTRY_EVENTS) return true;
   // Generic fallback for future API events.
   return event.endsWith('_ENTRY') || event.endsWith('_BEGIN') || event.endsWith('_STARTED');
 }
 
 export function isExitEvent(event: string): boolean {
-  if (NON_PAIR_EVENTS.has(event)) return false;
+  if (NON_PAIR_EVENTS.has(event) || NOISE_EVENTS.has(event)) return false;
   if (EXIT_EVENTS.has(event)) return true;
   return event.endsWith('_EXIT') || event.endsWith('_END') || event.endsWith('_FINISHED');
 }
