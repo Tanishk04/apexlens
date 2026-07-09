@@ -1,22 +1,28 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { AlertCircle, AlertTriangle, Download, Command, FolderOpen } from 'lucide-react';
-import { Sidebar } from './components/Sidebar';
+import { AlertCircle } from 'lucide-react';
 import { VirtualTree } from './components/VirtualTree';
 import { FilterBar } from './components/FilterBar';
 import { DetailPanel } from './components/DetailPanel';
 import { TabBar, type MainTab } from './components/TabBar';
+import { AppHeader, type LogMeta } from './components/AppHeader';
 import { GovernorDashboard } from './components/GovernorDashboard';
-import { AnalysisView } from './components/AnalysisView';
+import {
+  ExecutionAnalysis,
+  SoqlAnalysis,
+  DmlAnalysis,
+  FlowAnalysis,
+} from './components/AnalysisView';
 import { RawLogView } from './components/RawLogView';
 import { RawTreeView } from './components/RawTreeView';
 import { DebugView } from './components/DebugView';
 import { AiView } from './components/AiView';
+import { SummaryView } from './components/SummaryView';
 import { Timeline } from './components/Timeline';
 import { CommandPalette, type Command as PaletteCommand } from './components/CommandPalette';
 import { analyze } from './utils/analysis';
-import { toMarkdown, downloadText } from './utils/exportMarkdown';
-import { buildAiContext } from '../ai/context';
+import { useTheme } from './utils/theme';
+import { buildAiContext, buildFullPrompt } from '../ai/context';
 import { PROVIDERS } from '../ai/adapter';
 import {
   flattenEventLines,
@@ -55,20 +61,41 @@ const App = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [parsedLog, setParsedLog] = useState<ParsedDebugLog | null>(null);
+  // Raw log kept for full-log AI analysis (one extra copy of the string).
+  const [rawLog, setRawLog] = useState<string | null>(null);
+  const [meta, setMeta] = useState<LogMeta | null>(null);
 
   const [showDebug, setShowDebug] = useState(false);
   const [search, setSearch] = useState('');
   const [activeTypes, setActiveTypes] = useState<Set<string>>(new Set());
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [tab, setTab] = useState<MainTab>('tree');
+  const [tab, setTab] = useState<MainTab>('explorer');
   const [scrollToId, setScrollToId] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [theme, toggleTheme] = useTheme();
   const [ai, setAi] = useState<{ loading: boolean; result: string | null; error: string | null }>({
     loading: false,
     result: null,
     error: null,
   });
+
+  /** Parse a log body, capture meta, and run error-first navigation. */
+  const ingest = useCallback(async (body: string, name: string) => {
+    const started = performance.now();
+    const parsed = await parseLogInWorker(body);
+    setMeta({ name, sizeBytes: body.length, parseMs: performance.now() - started });
+    setRawLog(body);
+    setParsedLog(parsed);
+    if (parsed.exceptions.length > 0) {
+      const excId = parsed.exceptions[0]!.id;
+      setSelectedId(excId);
+      setScrollToId(excId);
+      setTab('tree');
+    } else {
+      setTab('explorer');
+    }
+  }, []);
 
   useEffect(() => {
     async function loadLog() {
@@ -78,30 +105,19 @@ const App = () => {
       const demo = params.get('demo') !== null || (!logId && import.meta.env.DEV);
 
       try {
-        let body: string;
         if (demo) {
-          body = SAMPLE_LOG;
+          await ingest(SAMPLE_LOG, 'demo-log');
         } else if (!logId || !domain) {
-          setError('Missing log ID or Salesforce domain in the URL.');
-          setLoading(false);
+          // Standalone launch (toolbar icon): show the landing state.
           return;
         } else {
           const sessionId = await getSessionId(domain);
           if (!sessionId) {
             setError('Session not found. Open Salesforce in another tab and log in, then retry.');
-            setLoading(false);
             return;
           }
-          body = await fetchLogBody(domain, sessionId, logId);
-        }
-
-        const parsed = await parseLogInWorker(body);
-        setParsedLog(parsed);
-        // Error-first: preselect the first exception and scroll the tree to it.
-        if (parsed.exceptions.length > 0) {
-          const excId = parsed.exceptions[0]!.id;
-          setSelectedId(excId);
-          setScrollToId(excId);
+          const body = await fetchLogBody(domain, sessionId, logId);
+          await ingest(body, logId);
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load debug log');
@@ -110,12 +126,9 @@ const App = () => {
       }
     }
     loadLog();
-  }, []);
+  }, [ingest]);
 
-  const nodeIndex = useMemo(
-    () => indexTree(parsedLog?.executionTree ?? null),
-    [parsedLog],
-  );
+  const nodeIndex = useMemo(() => indexTree(parsedLog?.executionTree ?? null), [parsedLog]);
 
   const treeNodes = useMemo(() => {
     if (!parsedLog) return [];
@@ -140,12 +153,10 @@ const App = () => {
   }, [nodeIndex]);
 
   const analysis = useMemo(() => analyze(parsedLog?.executionTree ?? null), [parsedLog]);
-  const parentMap = useMemo(
-    () => buildParentMap(parsedLog?.executionTree ?? null),
-    [parsedLog],
-  );
+  const parentMap = useMemo(() => buildParentMap(parsedLog?.executionTree ?? null), [parsedLog]);
 
   const selected = selectedId ? nodeIndex.get(selectedId) ?? null : null;
+  const issues = (parsedLog?.exceptions.length ?? 0) + (parsedLog?.truncated ? 1 : 0);
 
   /** Select a node, expand its ancestors, switch to the Tree tab and scroll to it. */
   const revealNode = useCallback(
@@ -165,16 +176,16 @@ const App = () => {
     [parentMap, nodeIndex],
   );
 
-  /** One-shot whole-log analysis: structured summary only, never the raw log. */
+  /** One-shot whole-log AI analysis: full raw log + structured summary. */
   const runAi = useCallback(
     async (providerId: string, apiKey: string, model: string) => {
-      if (!parsedLog) return;
+      if (!parsedLog || rawLog == null) return;
       const provider = PROVIDERS.find((p) => p.id === providerId);
       if (!provider) return;
       setAi({ loading: true, result: null, error: null });
       try {
-        const context = buildAiContext(parsedLog, analysis);
-        const result = await provider.explain(context, apiKey, model || undefined);
+        const prompt = buildFullPrompt(rawLog, buildAiContext(parsedLog, analysis));
+        const result = await provider.explain(prompt, apiKey, model || undefined);
         setAi({ loading: false, result, error: null });
       } catch (err) {
         setAi({
@@ -184,37 +195,29 @@ const App = () => {
         });
       }
     },
-    [parsedLog, analysis],
+    [parsedLog, rawLog, analysis],
   );
 
   /** Open a local .log file (works in dev and in the extension tab). */
-  const openLogFile = useCallback(async (file: File) => {
-    setLoading(true);
-    setError(null);
-    setAi({ loading: false, result: null, error: null });
-    setSelectedId(null);
-    setCollapsed(new Set());
-    try {
-      const body = await file.text();
-      const parsed = await parseLogInWorker(body);
-      setParsedLog(parsed);
-      if (parsed.exceptions.length > 0) {
-        setSelectedId(parsed.exceptions[0]!.id);
-        setScrollToId(parsed.exceptions[0]!.id);
+  const openLogFile = useCallback(
+    async (file: File) => {
+      setLoading(true);
+      setError(null);
+      setAi({ loading: false, result: null, error: null });
+      setSelectedId(null);
+      setCollapsed(new Set());
+      try {
+        await ingest(await file.text(), file.name);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to parse log file');
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to parse log file');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    },
+    [ingest],
+  );
 
-  const exportMarkdown = useCallback(() => {
-    if (!parsedLog) return;
-    downloadText('salesforce-debug-log.md', toMarkdown(parsedLog, analysis));
-  }, [parsedLog, analysis]);
-
-  /** Header "Errors" chip: reveal the next exception, cycling through them. */
+  /** Issues chip: reveal the next exception, cycling through them. */
   const jumpToNextException = useCallback(() => {
     const exceptions = parsedLog?.exceptions ?? [];
     if (exceptions.length === 0) return;
@@ -240,7 +243,8 @@ const App = () => {
     });
 
   const expandAll = () => setCollapsed(new Set());
-  const collapseAll = () => setCollapsed(new Set(collectExpandableIds(parsedLog?.executionTree ?? null)));
+  const collapseAll = () =>
+    setCollapsed(new Set(collectExpandableIds(parsedLog?.executionTree ?? null)));
 
   // ⌘K / Ctrl+K toggles the command palette.
   useEffect(() => {
@@ -255,19 +259,34 @@ const App = () => {
   }, []);
 
   const commands = useMemo<PaletteCommand[]>(() => {
+    const go = (id: MainTab, label: string): PaletteCommand => ({
+      id: `tab-${id}`,
+      label: `Go to ${label}`,
+      hint: 'view',
+      run: () => setTab(id),
+    });
     const cmds: PaletteCommand[] = [
-      { id: 'tab-tree', label: 'Go to Tree', hint: 'view', run: () => setTab('tree') },
-      { id: 'tab-timeline', label: 'Go to Timeline', hint: 'view', run: () => setTab('timeline') },
-      { id: 'tab-governor', label: 'Go to Governor', hint: 'view', run: () => setTab('governor') },
-      { id: 'tab-analysis', label: 'Go to Analysis', hint: 'view', run: () => setTab('analysis') },
-      { id: 'tab-debug', label: 'Go to Apex Debug', hint: 'view', run: () => setTab('debug') },
-      { id: 'tab-rawtree', label: 'Go to Raw Tree', hint: 'view', run: () => setTab('rawtree') },
-      { id: 'tab-explorer', label: 'Go to Log Explorer', hint: 'view', run: () => setTab('explorer') },
+      go('explorer', 'Log Explorer'),
+      go('rawtree', 'Raw Tree'),
+      go('debug', 'Apex Debug'),
+      go('timeline', 'Execution Timeline'),
+      go('tree', 'Execution Tree'),
+      go('execution', 'Execution Analysis'),
+      go('soql', 'SOQL Analysis'),
+      go('dml', 'DML Analysis'),
+      go('flow', 'Flow Analysis'),
+      go('governor', 'Governor'),
+      go('summary', 'Summary'),
       { id: 'tab-ai', label: 'Analyze log with AI', hint: 'ai', run: () => setTab('ai') },
+      { id: 'theme', label: 'Toggle light/dark theme', hint: 'view', run: toggleTheme },
       { id: 'expand', label: 'Expand all', hint: 'tree', run: expandAll },
       { id: 'collapse', label: 'Collapse all', hint: 'tree', run: collapseAll },
-      { id: 'clear', label: 'Clear type filters', hint: 'filter', run: () => setActiveTypes(new Set()) },
-      { id: 'export', label: 'Export report as Markdown', hint: 'export', run: exportMarkdown },
+      {
+        id: 'clear',
+        label: 'Clear type filters',
+        hint: 'filter',
+        run: () => setActiveTypes(new Set()),
+      },
     ];
     const exceptions = parsedLog?.exceptions ?? [];
     exceptions.forEach((ex, i) => {
@@ -280,11 +299,11 @@ const App = () => {
     });
     return cmds;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [parsedLog, exportMarkdown, revealNode]);
+  }, [parsedLog, revealNode, toggleTheme]);
 
   if (loading) {
     return (
-      <div className="flex h-full min-h-screen w-full items-center justify-center bg-zinc-950 text-zinc-400">
+      <div className="flex h-full min-h-screen w-full items-center justify-center bg-background text-muted-foreground">
         <span className="animate-pulse text-sm">Loading debug log…</span>
       </div>
     );
@@ -292,8 +311,8 @@ const App = () => {
 
   if (error) {
     return (
-      <div className="flex h-full min-h-screen w-full items-center justify-center bg-zinc-950 p-6">
-        <div className="flex max-w-md flex-col items-center gap-3 text-center text-red-400">
+      <div className="flex h-full min-h-screen w-full items-center justify-center bg-background p-6">
+        <div className="flex max-w-md flex-col items-center gap-3 text-center text-error">
           <AlertCircle className="h-8 w-8" />
           <p className="text-sm">{error}</p>
         </div>
@@ -301,159 +320,114 @@ const App = () => {
     );
   }
 
-  const m = parsedLog?.metrics;
-
   return (
-    <div className="flex h-full min-h-screen w-full overflow-hidden bg-zinc-950 font-sans text-zinc-300">
-      <Sidebar />
+    <div className="flex h-full min-h-screen w-full flex-col overflow-hidden bg-background text-foreground">
+      <AppHeader
+        meta={meta}
+        metrics={parsedLog?.metrics ?? null}
+        issues={issues}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        onOpenFile={openLogFile}
+        onOpenPalette={() => setPaletteOpen(true)}
+        onIssuesClick={jumpToNextException}
+      />
 
-      <main className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <header className="flex h-12 shrink-0 items-center justify-between gap-4 border-b border-zinc-800/60 bg-zinc-900/50 px-4">
-          <h1 className="truncate text-sm font-medium">
-            Debug Log
-            {parsedLog ? (
-              <span className="ml-2 text-zinc-500">
-                {treeNodes.length.toLocaleString()} shown · {parsedLog.rawLineCount.toLocaleString()} lines
-              </span>
-            ) : null}
-          </h1>
-          <div className="flex shrink-0 items-center gap-3 text-xs text-zinc-500">
-            {m ? (
-              <>
-                <span>SOQL {m.totalSoql}</span>
-                <span>DML {m.totalDml}</span>
-                <span>Rows {m.totalDmlRows}</span>
-                {m.cpuTimeMs > 0 ? <span>CPU {m.cpuTimeMs}ms</span> : null}
-                {m.exceptionCount > 0 ? (
-                  <button
-                    type="button"
-                    onClick={jumpToNextException}
-                    title="Jump to next exception"
-                    className="flex items-center gap-1 rounded-md bg-red-500/10 px-2 py-1 font-medium text-red-400 hover:bg-red-500/20"
-                  >
-                    <AlertTriangle size={12} /> Errors {m.exceptionCount}
-                  </button>
-                ) : (
-                  <span>Errors 0</span>
-                )}
-              </>
-            ) : null}
-            <label
-              title="Open a downloaded .log file"
-              className="flex cursor-pointer items-center gap-1 rounded-md border border-zinc-800 px-2 py-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
-            >
-              <FolderOpen size={13} /> Open log
-              <input
-                type="file"
-                accept=".log,.txt"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) openLogFile(file);
-                  e.target.value = '';
-                }}
-              />
-            </label>
-            <button
-              type="button"
-              onClick={exportMarkdown}
-              title="Export report as Markdown"
-              className="flex items-center gap-1 rounded-md border border-zinc-800 px-2 py-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
-            >
-              <Download size={13} /> Export
-            </button>
-            <button
-              type="button"
-              onClick={() => setPaletteOpen(true)}
-              title="Command palette (⌘K)"
-              className="flex items-center gap-1 rounded-md border border-zinc-800 px-2 py-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
-            >
-              <Command size={13} /> K
-            </button>
-          </div>
-        </header>
+      {!parsedLog ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
+          <p className="text-sm text-muted-foreground">
+            No log loaded. Use <span className="font-medium text-foreground">Open log</span> above,
+            or click <span className="font-medium text-foreground">Analyze</span> on a row in
+            Salesforce Setup ▸ Debug Logs.
+          </p>
+        </div>
+      ) : null}
 
-        {parsedLog?.truncated ? (
-          <div className="shrink-0 bg-yellow-500/10 px-4 py-1.5 text-xs text-yellow-500">
-            ⚠ Log was truncated (maximum debug log size reached). Some events may be missing.
-          </div>
-        ) : null}
+      {parsedLog?.truncated ? (
+        <div className="shrink-0 bg-warn/10 px-4 py-1.5 text-xs text-validation">
+          ⚠ Log was truncated (maximum debug log size reached). Some events may be missing.
+        </div>
+      ) : null}
 
-        <TabBar
-          active={tab}
-          onChange={setTab}
-          exceptionCount={parsedLog?.metrics.exceptionCount ?? 0}
+      {parsedLog ? (
+        <TabBar active={tab} onChange={setTab} exceptionCount={parsedLog.metrics.exceptionCount} />
+      ) : null}
+
+      {tab === 'tree' ? (
+        <FilterBar
+          availableTypes={availableTypes}
+          activeTypes={activeTypes}
+          onToggleType={toggleType}
+          onClearTypes={() => setActiveTypes(new Set())}
+          search={search}
+          onSearch={setSearch}
+          showDebug={showDebug}
+          onToggleDebug={setShowDebug}
+          onExpandAll={expandAll}
+          onCollapseAll={collapseAll}
         />
+      ) : null}
 
-        {tab === 'tree' ? (
-          <FilterBar
-            availableTypes={availableTypes}
-            activeTypes={activeTypes}
-            onToggleType={toggleType}
-            onClearTypes={() => setActiveTypes(new Set())}
-            search={search}
-            onSearch={setSearch}
-            showDebug={showDebug}
-            onToggleDebug={setShowDebug}
-            onExpandAll={expandAll}
-            onCollapseAll={collapseAll}
-          />
-        ) : null}
-
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <div className="min-h-0 min-w-0 flex-1">
-            {tab === 'tree' ? (
-              treeNodes.length > 0 ? (
-                <VirtualTree
-                  nodes={treeNodes}
-                  selectedId={selectedId}
-                  onSelect={setSelectedId}
-                  onToggle={toggleNode}
-                  scrollToId={scrollToId}
-                />
-              ) : (
-                <div className="flex h-full items-center justify-center text-sm text-zinc-500">
-                  No events match the current filters.
-                </div>
-              )
-            ) : tab === 'timeline' ? (
-              <Timeline
-                root={parsedLog?.executionTree ?? null}
+      {parsedLog ? (
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="min-h-0 min-w-0 flex-1">
+          {tab === 'tree' ? (
+            treeNodes.length > 0 ? (
+              <VirtualTree
+                nodes={treeNodes}
                 selectedId={selectedId}
                 onSelect={setSelectedId}
+                onToggle={toggleNode}
+                scrollToId={scrollToId}
               />
-            ) : tab === 'governor' ? (
-              parsedLog ? (
-                <GovernorDashboard limits={parsedLog.governorLimits} metrics={parsedLog.metrics} />
-              ) : null
-            ) : tab === 'analysis' ? (
-              <AnalysisView analysis={analysis} />
-            ) : tab === 'debug' ? (
-              <DebugView lines={parsedLog?.eventLines ?? []} />
-            ) : tab === 'rawtree' ? (
-              <RawTreeView lines={parsedLog?.eventLines ?? []} />
-            ) : tab === 'ai' ? (
-              <AiView log={parsedLog} analysis={analysis} ai={ai} onRun={runAi} />
             ) : (
-              <RawLogView lines={parsedLog?.eventLines ?? []} />
-            )}
-          </div>
-
-          {(tab === 'tree' || tab === 'timeline') && selected ? (
-            <DetailPanel
-              selected={selected}
-              exception={parsedLog?.exceptions.find((e) => e.id === selectedId) ?? null}
-              onClose={() => setSelectedId(null)}
+              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                No events match the current filters.
+              </div>
+            )
+          ) : tab === 'timeline' ? (
+            <Timeline
+              root={parsedLog?.executionTree ?? null}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              theme={theme}
             />
-          ) : null}
+          ) : tab === 'governor' ? (
+            parsedLog ? (
+              <GovernorDashboard limits={parsedLog.governorLimits} metrics={parsedLog.metrics} />
+            ) : null
+          ) : tab === 'execution' ? (
+            <ExecutionAnalysis analysis={analysis} />
+          ) : tab === 'soql' ? (
+            <SoqlAnalysis analysis={analysis} />
+          ) : tab === 'dml' ? (
+            <DmlAnalysis analysis={analysis} />
+          ) : tab === 'flow' ? (
+            <FlowAnalysis analysis={analysis} />
+          ) : tab === 'debug' ? (
+            <DebugView lines={parsedLog?.eventLines ?? []} />
+          ) : tab === 'rawtree' ? (
+            <RawTreeView lines={parsedLog?.eventLines ?? []} />
+          ) : tab === 'summary' ? (
+            <SummaryView log={parsedLog} analysis={analysis} />
+          ) : tab === 'ai' ? (
+            <AiView log={parsedLog} analysis={analysis} rawLog={rawLog} ai={ai} onRun={runAi} />
+          ) : (
+            <RawLogView lines={parsedLog?.eventLines ?? []} />
+          )}
         </div>
-      </main>
 
-      <CommandPalette
-        open={paletteOpen}
-        onClose={() => setPaletteOpen(false)}
-        commands={commands}
-      />
+        {(tab === 'tree' || tab === 'timeline') && selected ? (
+          <DetailPanel
+            selected={selected}
+            exception={parsedLog?.exceptions.find((e) => e.id === selectedId) ?? null}
+            onClose={() => setSelectedId(null)}
+          />
+        ) : null}
+      </div>
+      ) : null}
+
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={commands} />
     </div>
   );
 };

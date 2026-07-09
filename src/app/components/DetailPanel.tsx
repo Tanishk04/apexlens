@@ -16,8 +16,8 @@ function isExecutionNode(n: ExecutionNode | StatementEvent): n is ExecutionNode 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="min-w-0">
-      <div className="text-[10px] uppercase tracking-wide text-zinc-500">{label}</div>
-      <div className="truncate font-mono text-xs text-zinc-300">{value}</div>
+      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="truncate font-mono text-xs text-foreground">{value}</div>
     </div>
   );
 }
@@ -29,18 +29,18 @@ export const DetailPanel = ({ selected, exception, onClose }: Props) => {
   const stmt = !isExecutionNode(selected) ? selected : null;
 
   return (
-    <div className="flex max-h-56 shrink-0 flex-col border-t border-zinc-800/80 bg-zinc-900/60">
-      <div className="flex shrink-0 items-center justify-between border-b border-zinc-800/60 px-4 py-1.5">
-        <span className="flex items-center gap-2 text-xs font-medium text-zinc-300">
-          {exception ? <AlertTriangle size={13} className="text-red-400" /> : null}
+    <div className="flex max-h-56 shrink-0 flex-col border-t border-border bg-card/60">
+      <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-1.5">
+        <span className="flex items-center gap-2 text-xs font-medium text-foreground">
+          {exception ? <AlertTriangle size={13} className="text-error" /> : null}
           {node ? node.type : stmt!.type}
-          <span className="font-normal text-zinc-500">details</span>
+          <span className="font-normal text-muted-foreground">details</span>
         </span>
         <button
           type="button"
           onClick={onClose}
           aria-label="Close details"
-          className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
+          className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
         >
           <X size={14} />
         </button>
@@ -71,17 +71,17 @@ export const DetailPanel = ({ selected, exception, onClose }: Props) => {
         </div>
 
         {node?.unclosed ? (
-          <p className="mb-2 inline-block rounded bg-yellow-500/10 px-2 py-1 text-xs text-yellow-500">
+          <p className="mb-2 inline-block rounded bg-warn/10 px-2 py-1 text-xs text-warn">
             Not closed — log likely truncated.
           </p>
         ) : null}
 
-        <div className="whitespace-pre-wrap break-words rounded-md border border-zinc-800 bg-zinc-950 p-2.5 font-mono text-xs text-zinc-300">
+        <div className="whitespace-pre-wrap break-words rounded-md border border-border bg-background p-2.5 font-mono text-xs text-foreground">
           {node ? node.soql || node.name : stmt!.text}
         </div>
 
         {exception && exception.stackTrace.length > 0 ? (
-          <div className="mt-2 whitespace-pre-wrap break-words rounded-md border border-red-500/20 bg-red-500/5 p-2.5 font-mono text-xs text-red-300/90">
+          <div className="mt-2 whitespace-pre-wrap break-words rounded-md border border-error/30 bg-error/10 p-2.5 font-mono text-xs text-error/80">
             {exception.stackTrace.join('\n')}
           </div>
         ) : null}

@@ -8,16 +8,24 @@ import {
   Bug,
   Network,
   Sparkles,
+  Database,
+  Save,
+  GitBranch,
+  ScrollText,
 } from 'lucide-react';
 
 export type MainTab =
-  | 'tree'
-  | 'timeline'
-  | 'analysis'
-  | 'governor'
-  | 'debug'
-  | 'rawtree'
   | 'explorer'
+  | 'rawtree'
+  | 'debug'
+  | 'timeline'
+  | 'tree'
+  | 'execution'
+  | 'soql'
+  | 'dml'
+  | 'flow'
+  | 'governor'
+  | 'summary'
   | 'ai';
 
 interface Props {
@@ -26,32 +34,37 @@ interface Props {
   exceptionCount: number;
 }
 
+// Same order as Salesforce Log Inspector, then our extras.
 const TABS: { id: MainTab; label: string; Icon: typeof ListTree }[] = [
-  { id: 'tree', label: 'Tree', Icon: ListTree },
-  { id: 'timeline', label: 'Timeline', Icon: GanttChartSquare },
-  { id: 'analysis', label: 'Analysis', Icon: BarChart3 },
-  { id: 'governor', label: 'Governor', Icon: LayoutDashboard },
-  { id: 'debug', label: 'Debug', Icon: Bug },
+  { id: 'explorer', label: 'Log Explorer', Icon: FileText },
   { id: 'rawtree', label: 'Raw Tree', Icon: Network },
-  { id: 'explorer', label: 'Explorer', Icon: FileText },
+  { id: 'debug', label: 'Apex Debug', Icon: Bug },
+  { id: 'timeline', label: 'Execution Timeline', Icon: GanttChartSquare },
+  { id: 'tree', label: 'Execution Tree', Icon: ListTree },
+  { id: 'execution', label: 'Execution Analysis', Icon: BarChart3 },
+  { id: 'soql', label: 'SOQL Analysis', Icon: Database },
+  { id: 'dml', label: 'DML Analysis', Icon: Save },
+  { id: 'flow', label: 'Flow Analysis', Icon: GitBranch },
+  { id: 'governor', label: 'Governor', Icon: LayoutDashboard },
+  { id: 'summary', label: 'Summary', Icon: ScrollText },
   { id: 'ai', label: 'AI', Icon: Sparkles },
 ];
 
 export const TabBar = ({ active, onChange }: Props) => {
   return (
-    <div className="flex shrink-0 items-center gap-1 border-b border-zinc-800/60 bg-zinc-950 px-3">
+    <div className="flex shrink-0 items-center gap-0.5 overflow-x-auto border-b border-border bg-background px-2">
       {TABS.map(({ id, label, Icon }) => (
         <button
           key={id}
           type="button"
           onClick={() => onChange(id)}
-          className={`flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+          className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-2.5 py-2 text-sm font-medium transition-colors ${
             active === id
-              ? 'border-blue-500 text-zinc-100'
-              : 'border-transparent text-zinc-500 hover:text-zinc-300'
+              ? 'border-primary text-foreground'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
           }`}
         >
-          <Icon size={15} />
+          <Icon size={14} />
           {label}
         </button>
       ))}

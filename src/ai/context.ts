@@ -96,8 +96,13 @@ export function buildAiContext(log: ParsedDebugLog, analysis: Analysis): AiConte
   };
 }
 
-/** System + user prompt for the diagnosis request. */
-export function buildPrompt(context: AiContext): { system: string; user: string } {
+export interface AiPrompt {
+  system: string;
+  user: string;
+}
+
+/** System + user prompt for the summary-only diagnosis request. */
+export function buildPrompt(context: AiContext): AiPrompt {
   const system =
     'You are a Salesforce Apex performance and debugging expert. You are given a ' +
     'STRUCTURED summary of a Salesforce debug log (never the raw log). Diagnose the ' +
@@ -107,6 +112,50 @@ export function buildPrompt(context: AiContext): { system: string; user: string 
   const user =
     'Here is the structured debug-log summary as JSON:\n\n```json\n' +
     JSON.stringify(context, null, 2) +
+    '\n```\n\nDiagnose what happened and how to fix it.';
+  return { system, user };
+}
+
+/**
+ * Character budget for the raw log inside the prompt (~175k tokens). Longer
+ * logs are clipped head+tail — the middle is usually repetitive method noise,
+ * while failures/limits live at the edges.
+ */
+export const FULL_LOG_CHAR_LIMIT = 700_000;
+const HEAD_CHARS = 350_000;
+const TAIL_CHARS = 100_000;
+
+/**
+ * Full-log prompt: structured summary as orientation + the complete raw log.
+ * The user opted in to sending the whole log (token cost shown in the UI).
+ */
+export function buildFullPrompt(rawLog: string, context: AiContext): AiPrompt {
+  const system =
+    'You are a Salesforce Apex performance and debugging expert. You receive a ' +
+    'structured summary of a debug log followed by the raw debug log itself. ' +
+    'Read the ENTIRE log, then diagnose: root cause of any failure, governor-limit ' +
+    'risks, performance problems (SOQL in loops, recursive triggers, slow methods, ' +
+    'high DML), and concrete prioritized fixes referencing specific lines, methods ' +
+    'and queries from the log. Be specific — quote the relevant log lines. Use ' +
+    'short markdown sections.';
+
+  let logSection: string;
+  if (rawLog.length > FULL_LOG_CHAR_LIMIT) {
+    const head = rawLog.slice(0, HEAD_CHARS);
+    const tail = rawLog.slice(-TAIL_CHARS);
+    logSection =
+      head +
+      `\n\n[… log truncated for context: ${(rawLog.length - HEAD_CHARS - TAIL_CHARS).toLocaleString()} characters omitted …]\n\n` +
+      tail;
+  } else {
+    logSection = rawLog;
+  }
+
+  const user =
+    'Structured summary (orientation):\n\n```json\n' +
+    JSON.stringify(context, null, 2) +
+    '\n```\n\nComplete raw debug log:\n\n```\n' +
+    logSection +
     '\n```\n\nDiagnose what happened and how to fix it.';
   return { system, user };
 }

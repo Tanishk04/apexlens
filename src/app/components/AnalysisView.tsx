@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { AlertTriangle } from 'lucide-react';
 import type { Analysis, SoqlRow, DmlRow, FlowRow, MethodRow } from '../utils/analysis';
 import { VirtualTable, type Column } from './VirtualTable';
@@ -6,8 +6,6 @@ import { VirtualTable, type Column } from './VirtualTable';
 interface Props {
   analysis: Analysis;
 }
-
-type SubTab = 'soql' | 'dml' | 'flow' | 'execution';
 
 function fmtMs(ms: number): string {
   if (ms >= 10) return Math.round(ms).toString();
@@ -25,7 +23,7 @@ const soqlColumns: Column<SoqlRow>[] = [
       <span className="flex items-center gap-2">
         {r.inLoop ? (
           <span
-            className="inline-flex shrink-0 items-center gap-1 rounded bg-yellow-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-yellow-400"
+            className="inline-flex shrink-0 items-center gap-1 rounded bg-warn/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-validation"
             title="Executed multiple times at the same line — likely SOQL in a loop"
           >
             <AlertTriangle size={10} /> loop
@@ -126,77 +124,55 @@ const methodColumns: Column<MethodRow>[] = [
   },
 ];
 
-export const AnalysisView = ({ analysis }: Props) => {
-  const [tab, setTab] = useState<SubTab>('execution');
+// Each analysis is now its own top-level tab (matches Log Inspector).
 
-  const tabs: { id: SubTab; label: string; count: number }[] = [
-    { id: 'execution', label: 'Execution', count: analysis.methods.length },
-    { id: 'soql', label: 'SOQL', count: analysis.soql.length },
-    { id: 'dml', label: 'DML', count: analysis.dml.length },
-    { id: 'flow', label: 'Flow', count: analysis.flow.length },
-  ];
+export const ExecutionAnalysis = ({ analysis }: Props) => (
+  <VirtualTable
+    columns={methodColumns}
+    rows={analysis.methods}
+    getKey={(r) => r.type + r.namespace + r.name}
+    initialSort="selfMs"
+    emptyLabel="No method execution recorded."
+  />
+);
 
-  return (
-    <div className="flex h-full min-h-0 flex-col bg-zinc-950">
-      <div className="flex shrink-0 items-center gap-1 border-b border-zinc-800/60 px-3 py-1.5">
-        {tabs.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setTab(t.id)}
-            className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-              tab === t.id
-                ? 'bg-zinc-800 text-zinc-100'
-                : 'text-zinc-500 hover:bg-zinc-800/50 hover:text-zinc-300'
-            }`}
-          >
-            {t.label}
-            <span className="rounded bg-zinc-700/50 px-1 text-[10px] text-zinc-400">{t.count}</span>
-          </button>
-        ))}
-        {tab === 'soql' && analysis.soqlInLoopCount > 0 ? (
-          <span className="ml-auto flex items-center gap-1 text-xs text-yellow-400">
-            <AlertTriangle size={13} />
-            {analysis.soqlInLoopCount} quer{analysis.soqlInLoopCount === 1 ? 'y' : 'ies'} in a loop
-          </span>
-        ) : null}
+export const SoqlAnalysis = ({ analysis }: Props) => (
+  <div className="flex h-full min-h-0 flex-col bg-background">
+    {analysis.soqlInLoopCount > 0 ? (
+      <div className="flex shrink-0 items-center gap-1.5 border-b border-border bg-warn/10 px-4 py-1.5 text-xs text-validation">
+        <AlertTriangle size={13} />
+        {analysis.soqlInLoopCount} quer{analysis.soqlInLoopCount === 1 ? 'y' : 'ies'} executed in a
+        loop
       </div>
-
-      <div className="min-h-0 flex-1">
-        {tab === 'execution' ? (
-          <VirtualTable
-            columns={methodColumns}
-            rows={analysis.methods}
-            getKey={(r) => r.type + r.namespace + r.name}
-            initialSort="selfMs"
-            emptyLabel="No method execution recorded."
-          />
-        ) : tab === 'soql' ? (
-          <VirtualTable
-            columns={soqlColumns}
-            rows={analysis.soql}
-            getKey={(r) => r.query}
-            initialSort="totalMs"
-            emptyLabel="No SOQL queries in this log."
-          />
-        ) : tab === 'dml' ? (
-          <VirtualTable
-            columns={dmlColumns}
-            rows={analysis.dml}
-            getKey={(r) => r.action + r.object}
-            initialSort="totalMs"
-            emptyLabel="No DML operations in this log."
-          />
-        ) : (
-          <VirtualTable
-            columns={flowColumns}
-            rows={analysis.flow}
-            getKey={(r) => r.flow + r.element}
-            initialSort="count"
-            emptyLabel="No Flow execution in this log."
-          />
-        )}
-      </div>
+    ) : null}
+    <div className="min-h-0 flex-1">
+      <VirtualTable
+        columns={soqlColumns}
+        rows={analysis.soql}
+        getKey={(r) => r.query}
+        initialSort="totalMs"
+        emptyLabel="No SOQL queries in this log."
+      />
     </div>
-  );
-};
+  </div>
+);
+
+export const DmlAnalysis = ({ analysis }: Props) => (
+  <VirtualTable
+    columns={dmlColumns}
+    rows={analysis.dml}
+    getKey={(r) => r.action + r.object}
+    initialSort="totalMs"
+    emptyLabel="No DML operations in this log."
+  />
+);
+
+export const FlowAnalysis = ({ analysis }: Props) => (
+  <VirtualTable
+    columns={flowColumns}
+    rows={analysis.flow}
+    getKey={(r) => r.flow + r.element}
+    initialSort="count"
+    emptyLabel="No Flow execution in this log."
+  />
+);

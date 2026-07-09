@@ -1,13 +1,16 @@
 import React, { useMemo, useState } from 'react';
-import { Sparkles, ShieldCheck, Loader2 } from 'lucide-react';
+import { Sparkles, Coins, Loader2 } from 'lucide-react';
 import type { ParsedDebugLog } from '../../types';
 import type { Analysis } from '../utils/analysis';
-import { buildAiContext } from '../../ai/context';
+import { buildAiContext, FULL_LOG_CHAR_LIMIT } from '../../ai/context';
 import { PROVIDERS } from '../../ai/adapter';
+import { Markdown } from './Markdown';
 
 interface Props {
   log: ParsedDebugLog | null;
   analysis: Analysis;
+  /** The raw log text — sent in full to the provider (user opt-in). */
+  rawLog: string | null;
   ai: { loading: boolean; result: string | null; error: string | null };
   onRun: (providerId: string, apiKey: string, model: string) => void;
 }
@@ -18,62 +21,7 @@ const DEFAULT_MODEL: Record<string, string> = {
   ollama: 'llama3.1',
 };
 
-/** Minimal markdown renderer: headings, bullets, code fences, bold, inline code. */
-function Markdown({ text }: { text: string }) {
-  const blocks = useMemo(() => text.split(/```/), [text]);
-  return (
-    <div className="space-y-2 text-sm leading-relaxed text-zinc-300">
-      {blocks.map((block, i) =>
-        i % 2 === 1 ? (
-          <pre
-            key={i}
-            className="overflow-x-auto rounded-md border border-zinc-800 bg-zinc-900 p-3 font-mono text-xs text-zinc-300"
-          >
-            {block.replace(/^\w+\n/, '')}
-          </pre>
-        ) : (
-          <div key={i}>
-            {block.split('\n').map((line, j) => {
-              const inline = (s: string) =>
-                s.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).map((seg, k) => {
-                  if (seg.startsWith('**') && seg.endsWith('**'))
-                    return (
-                      <strong key={k} className="font-semibold text-zinc-100">
-                        {seg.slice(2, -2)}
-                      </strong>
-                    );
-                  if (seg.startsWith('`') && seg.endsWith('`'))
-                    return (
-                      <code key={k} className="rounded bg-zinc-800 px-1 font-mono text-xs">
-                        {seg.slice(1, -1)}
-                      </code>
-                    );
-                  return seg;
-                });
-              if (/^#{1,3}\s/.test(line))
-                return (
-                  <h3 key={j} className="mb-1 mt-3 text-sm font-semibold text-zinc-100">
-                    {inline(line.replace(/^#{1,3}\s/, ''))}
-                  </h3>
-                );
-              if (/^[-*]\s/.test(line))
-                return (
-                  <p key={j} className="pl-4">
-                    <span className="mr-2 text-zinc-500">•</span>
-                    {inline(line.replace(/^[-*]\s/, ''))}
-                  </p>
-                );
-              if (line.trim() === '') return <div key={j} className="h-1.5" />;
-              return <p key={j}>{inline(line)}</p>;
-            })}
-          </div>
-        ),
-      )}
-    </div>
-  );
-}
-
-export const AiView = ({ log, analysis, ai, onRun }: Props) => {
+export const AiView = ({ log, analysis, rawLog, ai, onRun }: Props) => {
   const [providerId, setProviderId] = useState(
     () => localStorage.getItem('sfda_ai_provider') ?? 'anthropic',
   );
@@ -84,10 +32,15 @@ export const AiView = ({ log, analysis, ai, onRun }: Props) => {
     () => localStorage.getItem('sfda_ai_model') ?? DEFAULT_MODEL['anthropic']!,
   );
 
-  const contextSize = useMemo(() => {
+  // Rough token estimate for the full prompt (raw log + structured summary).
+  const tokenEstimate = useMemo(() => {
     if (!log) return 0;
-    return JSON.stringify(buildAiContext(log, analysis)).length;
-  }, [log, analysis]);
+    const contextChars = JSON.stringify(buildAiContext(log, analysis)).length;
+    const logChars = Math.min(rawLog?.length ?? 0, FULL_LOG_CHAR_LIMIT);
+    return Math.ceil((contextChars + logChars) / 4);
+  }, [log, analysis, rawLog]);
+
+  const clipped = (rawLog?.length ?? 0) > FULL_LOG_CHAR_LIMIT;
 
   const changeProvider = (id: string) => {
     setProviderId(id);
@@ -105,22 +58,22 @@ export const AiView = ({ log, analysis, ai, onRun }: Props) => {
   };
 
   return (
-    <div className="h-full overflow-auto bg-zinc-950">
+    <div className="h-full overflow-auto bg-background">
       <div className="mx-auto max-w-3xl space-y-5 p-6">
         {/* config */}
-        <section className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
+        <section className="rounded-lg border border-border bg-card/40 p-4">
           <div className="mb-3 flex items-center gap-2">
-            <Sparkles size={16} className="text-blue-400" />
-            <h2 className="text-sm font-medium text-zinc-100">AI Log Analysis</h2>
+            <Sparkles size={16} className="text-debug" />
+            <h2 className="text-sm font-medium text-foreground">AI Log Analysis</h2>
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <label className="block text-xs text-zinc-500">
+            <label className="block text-xs text-muted-foreground">
               Provider
               <select
                 value={providerId}
                 onChange={(e) => changeProvider(e.target.value)}
-                className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-sm text-zinc-200 focus:border-blue-500 focus:outline-none"
+                className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground focus:border-ring focus:outline-none"
               >
                 {PROVIDERS.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -129,38 +82,48 @@ export const AiView = ({ log, analysis, ai, onRun }: Props) => {
                 ))}
               </select>
             </label>
-            <label className="block text-xs text-zinc-500">
+            <label className="block text-xs text-muted-foreground">
               Model
               <input
                 type="text"
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
-                className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-950 px-2 py-1.5 font-mono text-sm text-zinc-200 focus:border-blue-500 focus:outline-none"
+                className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 font-mono text-sm text-foreground focus:border-ring focus:outline-none"
               />
             </label>
-            <label className="block text-xs text-zinc-500">
+            <label className="block text-xs text-muted-foreground">
               API key {providerId === 'ollama' ? '(optional for local)' : ''}
               <input
                 type="password"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 placeholder="sk-…"
-                className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-950 px-2 py-1.5 font-mono text-sm text-zinc-200 focus:border-blue-500 focus:outline-none"
+                className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 font-mono text-sm text-foreground focus:border-ring focus:outline-none"
               />
             </label>
           </div>
 
           <div className="mt-4 flex items-center justify-between gap-3">
-            <p className="flex items-center gap-1.5 text-xs text-zinc-500">
-              <ShieldCheck size={13} className="text-emerald-500" />
-              Only a structured summary ({(contextSize / 1024).toFixed(1)} KB) is sent — never the
-              raw log. Key stays in this browser.
+            <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+              <Coins size={13} className="mt-0.5 shrink-0 text-validation" />
+              <span>
+                Sends the <strong className="text-foreground">entire raw log</strong> plus a
+                structured summary — about{' '}
+                <strong className="text-foreground">
+                  ~{tokenEstimate.toLocaleString()} tokens
+                </strong>{' '}
+                of API usage per run.
+                {clipped
+                  ? ' This log exceeds the context budget; the middle section will be clipped.'
+                  : ''}{' '}
+                Key stays in this browser.
+              </span>
             </p>
             <button
               type="button"
               onClick={run}
               disabled={ai.loading || !log || (providerId !== 'ollama' && !apiKey)}
-              className="flex shrink-0 items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex shrink-0 items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {ai.loading ? (
                 <>
@@ -177,19 +140,19 @@ export const AiView = ({ log, analysis, ai, onRun }: Props) => {
 
         {/* result */}
         {ai.error ? (
-          <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-400">
+          <div className="rounded-lg border border-error/30 bg-error/10 p-4 text-sm text-error">
             {ai.error}
           </div>
         ) : null}
         {ai.result ? (
-          <section className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-5">
+          <section className="rounded-lg border border-border bg-card/30 p-5">
             <Markdown text={ai.result} />
           </section>
         ) : null}
         {!ai.result && !ai.error && !ai.loading ? (
-          <p className="text-center text-xs text-zinc-600">
-            The whole parsed log — exceptions, limits, slowest methods, SOQL/DML patterns — is
-            analyzed in one pass. No per-line clicking.
+          <p className="text-center text-xs text-muted-foreground/70">
+            The AI reads the whole log — exceptions, limits, timings, queries — in one pass. No
+            per-line clicking.
           </p>
         ) : null}
       </div>

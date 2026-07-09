@@ -92,23 +92,24 @@ export function buildFlameLayout(root: ExecutionNode | null): FlameLayout {
   return { rects, markers, t0, t1, maxDepth };
 }
 
-/** Solid fill colors per node type (aligned with the tree/filter palette). */
-export const FLAME_COLORS: Record<string, string> = {
-  CODE_UNIT: '#f59e0b',
-  METHOD: '#a855f7',
-  TRIGGER: '#f97316',
-  FLOW: '#06b6d4',
-  WORKFLOW: '#14b8a6',
-  SOQL: '#22c55e',
-  SOSL: '#22c55e',
-  DML: '#10b981',
-  CALLOUT: '#0ea5e9',
-  VALIDATION: '#eab308',
-  VF: '#ec4899',
-  SYSTEM: '#71717a',
-  GENERIC: '#52525b',
+/** CSS variable per node type — resolved at draw time so themes apply. */
+const FLAME_VARS: Record<string, string> = {
+  CODE_UNIT: '--c-code-unit',
+  METHOD: '--c-method',
+  TRIGGER: '--c-trigger',
+  FLOW: '--c-flow',
+  WORKFLOW: '--c-workflow',
+  SOQL: '--c-soql',
+  SOSL: '--c-soql',
+  DML: '--c-dml',
+  CALLOUT: '--c-callout',
+  VALIDATION: '--c-validation',
+  VF: '--c-vf',
+  SYSTEM: '--c-system',
+  GENERIC: '--c-system',
 };
 
 export function flameColor(type: string): string {
-  return FLAME_COLORS[type] ?? FLAME_COLORS.GENERIC!;
+  const varName = FLAME_VARS[type] ?? FLAME_VARS.GENERIC!;
+  return getComputedStyle(document.documentElement).getPropertyValue(varName).trim() || '#888';
 }

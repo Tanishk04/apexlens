@@ -28,25 +28,25 @@ interface VirtualTreeProps {
 }
 
 const TYPE_STYLE: Record<string, { color: string; badge: string; Icon: typeof Database }> = {
-  CODE_UNIT: { color: 'text-amber-400', badge: 'bg-amber-500/10 text-amber-400', Icon: Layers },
-  METHOD: { color: 'text-purple-400', badge: 'bg-purple-500/10 text-purple-400', Icon: Code2 },
-  TRIGGER: { color: 'text-orange-400', badge: 'bg-orange-500/10 text-orange-400', Icon: Cog },
-  FLOW: { color: 'text-cyan-400', badge: 'bg-cyan-500/10 text-cyan-400', Icon: GitBranch },
-  WORKFLOW: { color: 'text-teal-400', badge: 'bg-teal-500/10 text-teal-400', Icon: Workflow },
-  SOQL: { color: 'text-green-400', badge: 'bg-green-500/10 text-green-400', Icon: Database },
-  SOSL: { color: 'text-green-400', badge: 'bg-green-500/10 text-green-400', Icon: Search },
-  DML: { color: 'text-emerald-400', badge: 'bg-emerald-500/10 text-emerald-400', Icon: Save },
-  CALLOUT: { color: 'text-sky-400', badge: 'bg-sky-500/10 text-sky-400', Icon: Globe },
+  CODE_UNIT: { color: 'text-code-unit', badge: 'bg-code-unit/15 text-code-unit', Icon: Layers },
+  METHOD: { color: 'text-method', badge: 'bg-method/15 text-method', Icon: Code2 },
+  TRIGGER: { color: 'text-trigger', badge: 'bg-trigger/15 text-trigger', Icon: Cog },
+  FLOW: { color: 'text-flow', badge: 'bg-flow/15 text-flow', Icon: GitBranch },
+  WORKFLOW: { color: 'text-workflow', badge: 'bg-workflow/15 text-workflow', Icon: Workflow },
+  SOQL: { color: 'text-soql', badge: 'bg-soql/15 text-soql', Icon: Database },
+  SOSL: { color: 'text-soql', badge: 'bg-soql/15 text-soql', Icon: Search },
+  DML: { color: 'text-dml', badge: 'bg-dml/15 text-dml', Icon: Save },
+  CALLOUT: { color: 'text-callout', badge: 'bg-callout/15 text-callout', Icon: Globe },
   VALIDATION: {
-    color: 'text-yellow-400',
-    badge: 'bg-yellow-500/10 text-yellow-400',
+    color: 'text-validation',
+    badge: 'bg-warn/10 text-validation',
     Icon: ShieldCheck,
   },
-  VF: { color: 'text-pink-400', badge: 'bg-pink-500/10 text-pink-400', Icon: Layers },
-  SYSTEM: { color: 'text-zinc-400', badge: 'bg-zinc-700/40 text-zinc-300', Icon: Cog },
-  DEBUG: { color: 'text-blue-400', badge: 'bg-blue-500/10 text-blue-400', Icon: Bug },
-  EXCEPTION: { color: 'text-red-400', badge: 'bg-red-500/10 text-red-400', Icon: AlertTriangle },
-  GENERIC: { color: 'text-zinc-500', badge: 'bg-zinc-800 text-zinc-400', Icon: Circle },
+  VF: { color: 'text-vf', badge: 'bg-vf/15 text-vf', Icon: Layers },
+  SYSTEM: { color: 'text-muted-foreground', badge: 'bg-muted text-foreground', Icon: Cog },
+  DEBUG: { color: 'text-debug', badge: 'bg-debug/15 text-debug', Icon: Bug },
+  EXCEPTION: { color: 'text-error', badge: 'bg-error/10 text-error', Icon: AlertTriangle },
+  GENERIC: { color: 'text-muted-foreground', badge: 'bg-muted text-muted-foreground', Icon: Circle },
 };
 
 function styleFor(type: string) {
@@ -78,7 +78,7 @@ export const VirtualTree = ({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex shrink-0 items-center border-b border-zinc-800 bg-zinc-900/60 py-1 pl-3 pr-3 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+      <div className="flex shrink-0 items-center border-b border-border bg-card/60 py-1 pl-3 pr-3 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
         <span>Event</span>
         <div className="ml-auto flex shrink-0 font-mono normal-case">
           <span className="w-12 text-right">SOQL</span>
@@ -88,7 +88,7 @@ export const VirtualTree = ({
           <span className="w-16 text-right">Self</span>
         </div>
       </div>
-      <div ref={parentRef} className="min-h-0 w-full flex-1 overflow-auto bg-zinc-950">
+      <div ref={parentRef} className="min-h-0 w-full flex-1 overflow-auto bg-background">
       <div
         style={{
           height: `${rowVirtualizer.getTotalSize()}px`,
@@ -117,12 +117,12 @@ export const VirtualTree = ({
                 height: `${virtualRow.size}px`,
                 transform: `translateY(${virtualRow.start}px)`,
               }}
-              className={`flex cursor-pointer items-center gap-2 border-b border-zinc-900 pr-3 text-sm ${
+              className={`flex cursor-pointer items-center gap-2 border-b border-border/40 pr-3 text-sm ${
                 isSelected
-                  ? 'bg-blue-500/10 ring-1 ring-inset ring-blue-500/40'
+                  ? 'bg-debug/15 ring-1 ring-inset ring-ring'
                   : isException
-                    ? 'bg-red-500/5 hover:bg-red-500/10'
-                    : 'hover:bg-zinc-900/50'
+                    ? 'bg-error/10 hover:bg-error/20'
+                    : 'hover:bg-accent/60'
               }`}
             >
               {/* indentation */}
@@ -136,7 +136,7 @@ export const VirtualTree = ({
                     e.stopPropagation();
                     onToggle(node.id);
                   }}
-                  className="shrink-0 rounded p-0.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
+                  className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
                   aria-label={node.collapsed ? 'Expand' : 'Collapse'}
                 >
                   <ChevronRight
@@ -159,28 +159,28 @@ export const VirtualTree = ({
               <span
                 className={`whitespace-nowrap pr-6 ${
                   node.type === 'SOQL' || node.type === 'SOSL'
-                    ? 'font-mono text-xs text-zinc-300'
-                    : 'text-zinc-200'
+                    ? 'font-mono text-xs text-foreground'
+                    : 'text-foreground'
                 }`}
               >
                 {node.name}
               </span>
 
               {node.lineNumber ? (
-                <span className="shrink-0 text-xs text-zinc-600">:{node.lineNumber}</span>
+                <span className="shrink-0 text-xs text-muted-foreground/70">:{node.lineNumber}</span>
               ) : null}
 
               {/* metric columns (sticky right so they stay visible on h-scroll) */}
-              <div className="sticky right-0 ml-auto flex shrink-0 items-center gap-0 bg-zinc-950/90 pl-2 font-mono text-xs">
-                <Metric value={node.totSoql} className="text-green-500" />
-                <Metric value={node.totDml} className="text-emerald-500" />
-                <Metric value={node.totRows} className="text-zinc-400" />
-                <span className="w-16 text-right text-zinc-500">
+              <div className="sticky right-0 ml-auto flex shrink-0 items-center gap-0 bg-background/90 pl-2 font-mono text-xs">
+                <Metric value={node.totSoql} className="text-soql" />
+                <Metric value={node.totDml} className="text-dml" />
+                <Metric value={node.totRows} className="text-muted-foreground" />
+                <span className="w-16 text-right text-muted-foreground">
                   {node.durationMs > 0 ? `${node.durationMs}ms` : ''}
                 </span>
                 <span
                   className={`w-16 rounded text-right ${
-                    isSlow ? 'bg-yellow-500/10 px-1 text-yellow-500' : 'text-zinc-600'
+                    isSlow ? 'bg-warn/10 px-1 text-warn' : 'text-muted-foreground/70'
                   }`}
                 >
                   {node.selfMs > 0 ? `${node.selfMs}ms` : ''}

@@ -27,19 +27,19 @@ export const RawLogView = ({ lines }: Props) => {
   });
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-zinc-950">
-      <div className="flex shrink-0 items-center gap-2 border-b border-zinc-800/60 px-3 py-2">
+    <div className="flex h-full min-h-0 flex-col bg-background">
+      <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
         <div className="relative flex-1">
-          <Search className="pointer-events-none absolute left-2.5 top-2 h-3.5 w-3.5 text-zinc-500" />
+          <Search className="pointer-events-none absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
           <input
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search raw log…"
-            className="w-full rounded-md border border-zinc-800 bg-zinc-950 py-1.5 pl-8 pr-3 text-sm text-zinc-200 placeholder:text-zinc-600 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="w-full rounded-md border border-border bg-background py-1.5 pl-8 pr-3 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
           />
         </div>
-        <span className="shrink-0 text-xs text-zinc-500">
+        <span className="shrink-0 text-xs text-muted-foreground">
           {filtered.length.toLocaleString()} lines
         </span>
       </div>
@@ -60,13 +60,13 @@ export const RawLogView = ({ lines }: Props) => {
                   height: vr.size,
                   transform: `translateY(${vr.start}px)`,
                 }}
-                className="flex items-center gap-3 whitespace-nowrap px-4 hover:bg-zinc-900/50"
+                className="flex items-center gap-3 whitespace-nowrap px-4 hover:bg-accent/60"
               >
-                <span className="shrink-0 text-emerald-400">{line.event}</span>
+                <span className="shrink-0 text-dml">{line.event}</span>
                 {line.lineNumber ? (
-                  <span className="shrink-0 text-zinc-600">[{line.lineNumber}]</span>
+                  <span className="shrink-0 text-muted-foreground/70">[{line.lineNumber}]</span>
                 ) : null}
-                <span className="text-zinc-400">{line.payload}</span>
+                <span className="text-muted-foreground">{line.payload}</span>
               </div>
             );
           })}

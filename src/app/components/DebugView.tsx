@@ -16,13 +16,13 @@ interface DebugRow {
 }
 
 const LEVEL_COLOR: Record<string, string> = {
-  ERROR: 'bg-red-500/15 text-red-400',
-  WARN: 'bg-yellow-500/15 text-yellow-400',
-  INFO: 'bg-blue-500/15 text-blue-400',
-  DEBUG: 'bg-zinc-700/40 text-zinc-300',
-  FINE: 'bg-zinc-800 text-zinc-400',
-  FINER: 'bg-zinc-800 text-zinc-400',
-  FINEST: 'bg-zinc-800 text-zinc-500',
+  ERROR: 'bg-error/10 text-error',
+  WARN: 'bg-warn/10 text-validation',
+  INFO: 'bg-debug/15 text-debug',
+  DEBUG: 'bg-muted text-foreground',
+  FINE: 'bg-muted text-muted-foreground',
+  FINER: 'bg-muted text-muted-foreground',
+  FINEST: 'bg-muted text-muted-foreground',
 };
 
 /** USER_DEBUG payload: [line]|LEVEL|message — level is the first pipe field. */
@@ -65,12 +65,12 @@ export const DebugView = ({ lines }: Props) => {
 
   if (debugRows.length === 0) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 bg-zinc-950 p-8 text-center">
-        <Bug size={28} className="text-zinc-700" />
-        <p className="text-sm text-zinc-500">No USER_DEBUG statements in this log.</p>
-        <p className="max-w-sm text-xs text-zinc-600">
-          Add <span className="font-mono text-zinc-500">System.debug(…)</span> calls, or check that
-          the <span className="font-mono text-zinc-500">APEX_CODE</span> trace level is DEBUG or
+      <div className="flex h-full flex-col items-center justify-center gap-3 bg-background p-8 text-center">
+        <Bug size={28} className="text-muted-foreground/50" />
+        <p className="text-sm text-muted-foreground">No USER_DEBUG statements in this log.</p>
+        <p className="max-w-sm text-xs text-muted-foreground/70">
+          Add <span className="font-mono text-muted-foreground">System.debug(…)</span> calls, or check that
+          the <span className="font-mono text-muted-foreground">APEX_CODE</span> trace level is DEBUG or
           finer.
         </p>
       </div>
@@ -78,19 +78,19 @@ export const DebugView = ({ lines }: Props) => {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-zinc-950">
-      <div className="flex shrink-0 items-center gap-2 border-b border-zinc-800/60 px-3 py-2">
+    <div className="flex h-full min-h-0 flex-col bg-background">
+      <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
         <div className="relative flex-1">
-          <Search className="pointer-events-none absolute left-2.5 top-2 h-3.5 w-3.5 text-zinc-500" />
+          <Search className="pointer-events-none absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
           <input
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search debug output…"
-            className="w-full rounded-md border border-zinc-800 bg-zinc-950 py-1.5 pl-8 pr-3 text-sm text-zinc-200 placeholder:text-zinc-600 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="w-full rounded-md border border-border bg-background py-1.5 pl-8 pr-3 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
           />
         </div>
-        <span className="shrink-0 text-xs text-zinc-500">
+        <span className="shrink-0 text-xs text-muted-foreground">
           {rows.length.toLocaleString()} statements
         </span>
       </div>
@@ -110,9 +110,9 @@ export const DebugView = ({ lines }: Props) => {
                   minHeight: vr.size,
                   transform: `translateY(${vr.start}px)`,
                 }}
-                className="flex items-start gap-3 border-b border-zinc-900 px-4 py-1 hover:bg-zinc-900/50"
+                className="flex items-start gap-3 border-b border-border/40 px-4 py-1 hover:bg-accent/60"
               >
-                <span className="w-12 shrink-0 pt-0.5 text-right font-mono text-xs text-zinc-600">
+                <span className="w-12 shrink-0 pt-0.5 text-right font-mono text-xs text-muted-foreground/70">
                   {row.lineNumber ? row.lineNumber : ''}
                 </span>
                 <span
@@ -122,7 +122,7 @@ export const DebugView = ({ lines }: Props) => {
                 >
                   {row.level}
                 </span>
-                <span className="whitespace-pre-wrap break-words font-mono text-xs text-zinc-300">
+                <span className="whitespace-pre-wrap break-words font-mono text-xs text-foreground">
                   {row.message}
                 </span>
               </div>

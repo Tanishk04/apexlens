@@ -1,23 +1,21 @@
-import type { AiContext } from './context';
-import { buildPrompt } from './context';
+import type { AiPrompt } from './context';
 
 export interface AiProvider {
   id: string;
   label: string;
-  /** Send the structured context and return the diagnosis markdown. */
-  explain(context: AiContext, apiKey: string, model?: string): Promise<string>;
+  /** Send a prepared prompt pair and return the diagnosis markdown. */
+  explain(prompt: AiPrompt, apiKey: string, model?: string): Promise<string>;
 }
 
 /**
  * Anthropic Claude provider. Runs from the extension page (host permission for
  * api.anthropic.com is declared in the manifest). BYOK — the key is supplied by
- * the user and stored locally; only the structured context is transmitted.
+ * the user and stored locally.
  */
 export const anthropicProvider: AiProvider = {
   id: 'anthropic',
   label: 'Claude (Anthropic)',
-  async explain(context, apiKey, model = 'claude-opus-4-8') {
-    const { system, user } = buildPrompt(context);
+  async explain({ system, user }, apiKey, model = 'claude-opus-4-8') {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -29,7 +27,7 @@ export const anthropicProvider: AiProvider = {
       },
       body: JSON.stringify({
         model,
-        max_tokens: 1024,
+        max_tokens: 2048,
         system,
         messages: [{ role: 'user', content: user }],
       }),
@@ -59,8 +57,7 @@ export function openAiCompatibleProvider(
   return {
     id,
     label,
-    async explain(context, apiKey, model = 'gpt-4o-mini') {
-      const { system, user } = buildPrompt(context);
+    async explain({ system, user }, apiKey, model = 'gpt-4o-mini') {
       const res = await fetch(`${baseUrl}/chat/completions`, {
         method: 'POST',
         headers: {

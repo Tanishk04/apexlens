@@ -69,23 +69,23 @@ export const CommandPalette = ({ open, onClose, commands }: Props) => {
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg overflow-hidden rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl"
+        className="w-full max-w-lg overflow-hidden rounded-xl border border-input bg-card shadow-2xl"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={onKeyDown}
       >
-        <div className="flex items-center gap-2 border-b border-zinc-800 px-3">
-          <Search size={16} className="text-zinc-500" />
+        <div className="flex items-center gap-2 border-b border-border px-3">
+          <Search size={16} className="text-muted-foreground" />
           <input
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Type a command…"
-            className="w-full bg-transparent py-3 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none"
+            className="w-full bg-transparent py-3 text-sm text-foreground placeholder:text-muted-foreground/70 focus:outline-none"
           />
         </div>
         <ul className="max-h-80 overflow-y-auto py-1">
           {filtered.length === 0 ? (
-            <li className="px-4 py-3 text-sm text-zinc-600">No matching commands.</li>
+            <li className="px-4 py-3 text-sm text-muted-foreground/70">No matching commands.</li>
           ) : (
             filtered.map((cmd, i) => (
               <li key={cmd.id}>
@@ -94,15 +94,15 @@ export const CommandPalette = ({ open, onClose, commands }: Props) => {
                   onMouseEnter={() => setActive(i)}
                   onClick={() => run(cmd)}
                   className={`flex w-full items-center justify-between gap-3 px-4 py-2 text-left text-sm ${
-                    i === active ? 'bg-blue-600/20 text-zinc-100' : 'text-zinc-300'
+                    i === active ? 'bg-accent text-foreground' : 'text-foreground'
                   }`}
                 >
                   <span className="truncate">{cmd.label}</span>
                   {cmd.hint ? (
-                    <span className="shrink-0 text-xs text-zinc-500">{cmd.hint}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">{cmd.hint}</span>
                   ) : null}
                   {i === active ? (
-                    <CornerDownLeft size={13} className="shrink-0 text-zinc-500" />
+                    <CornerDownLeft size={13} className="shrink-0 text-muted-foreground" />
                   ) : null}
                 </button>
               </li>

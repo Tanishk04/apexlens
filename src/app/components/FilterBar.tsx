@@ -16,24 +16,24 @@ interface FilterBarProps {
 
 // Full static class strings so Tailwind's scanner can see them (no runtime interpolation).
 const ACTIVE_CHIP: Record<string, string> = {
-  CODE_UNIT: 'bg-amber-500/20 text-amber-300 ring-1 ring-inset ring-amber-500/40',
-  METHOD: 'bg-purple-500/20 text-purple-300 ring-1 ring-inset ring-purple-500/40',
-  TRIGGER: 'bg-orange-500/20 text-orange-300 ring-1 ring-inset ring-orange-500/40',
-  FLOW: 'bg-cyan-500/20 text-cyan-300 ring-1 ring-inset ring-cyan-500/40',
-  WORKFLOW: 'bg-teal-500/20 text-teal-300 ring-1 ring-inset ring-teal-500/40',
-  SOQL: 'bg-green-500/20 text-green-300 ring-1 ring-inset ring-green-500/40',
-  SOSL: 'bg-green-500/20 text-green-300 ring-1 ring-inset ring-green-500/40',
-  DML: 'bg-emerald-500/20 text-emerald-300 ring-1 ring-inset ring-emerald-500/40',
-  CALLOUT: 'bg-sky-500/20 text-sky-300 ring-1 ring-inset ring-sky-500/40',
-  VALIDATION: 'bg-yellow-500/20 text-yellow-300 ring-1 ring-inset ring-yellow-500/40',
-  VF: 'bg-pink-500/20 text-pink-300 ring-1 ring-inset ring-pink-500/40',
-  SYSTEM: 'bg-zinc-600/30 text-zinc-200 ring-1 ring-inset ring-zinc-500/40',
-  DEBUG: 'bg-blue-500/20 text-blue-300 ring-1 ring-inset ring-blue-500/40',
-  EXCEPTION: 'bg-red-500/20 text-red-300 ring-1 ring-inset ring-red-500/40',
-  GENERIC: 'bg-zinc-600/30 text-zinc-200 ring-1 ring-inset ring-zinc-500/40',
+  CODE_UNIT: 'bg-code-unit/15 text-code-unit ring-1 ring-inset ring-code-unit/40',
+  METHOD: 'bg-method/15 text-method ring-1 ring-inset ring-method/40',
+  TRIGGER: 'bg-trigger/15 text-trigger ring-1 ring-inset ring-trigger/40',
+  FLOW: 'bg-flow/15 text-flow ring-1 ring-inset ring-flow/40',
+  WORKFLOW: 'bg-workflow/15 text-workflow ring-1 ring-inset ring-workflow/40',
+  SOQL: 'bg-soql/15 text-soql ring-1 ring-inset ring-soql/40',
+  SOSL: 'bg-soql/15 text-soql ring-1 ring-inset ring-soql/40',
+  DML: 'bg-dml/15 text-dml ring-1 ring-inset ring-dml/40',
+  CALLOUT: 'bg-callout/15 text-callout ring-1 ring-inset ring-callout/40',
+  VALIDATION: 'bg-warn/10 text-validation ring-1 ring-inset ring-validation/40',
+  VF: 'bg-vf/15 text-vf ring-1 ring-inset ring-vf/40',
+  SYSTEM: 'bg-muted text-foreground ring-1 ring-inset ring-border',
+  DEBUG: 'bg-debug/15 text-debug ring-1 ring-inset ring-ring',
+  EXCEPTION: 'bg-error/15 text-error ring-1 ring-inset ring-error/40',
+  GENERIC: 'bg-muted text-foreground ring-1 ring-inset ring-border',
 };
 
-const INACTIVE_CHIP = 'bg-zinc-900 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800';
+const INACTIVE_CHIP = 'bg-card text-muted-foreground hover:text-foreground hover:bg-accent';
 
 function chipClass(type: string, active: boolean): string {
   if (!active) return INACTIVE_CHIP;
@@ -55,24 +55,24 @@ export const FilterBar = ({
   const hasFilter = activeTypes.size > 0;
 
   return (
-    <div className="flex flex-col gap-2 border-b border-zinc-800/60 bg-zinc-900/40 px-3 py-2">
+    <div className="flex flex-col gap-2 border-b border-border bg-card/40 px-3 py-2">
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
-          <Search className="pointer-events-none absolute left-2.5 top-2 h-3.5 w-3.5 text-zinc-500" />
+          <Search className="pointer-events-none absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
           <input
             type="text"
             value={search}
             onChange={(e) => onSearch(e.target.value)}
             placeholder="Filter events…"
-            className="w-full rounded-md border border-zinc-800 bg-zinc-950 py-1.5 pl-8 pr-3 text-sm text-zinc-200 placeholder:text-zinc-600 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="w-full rounded-md border border-border bg-background py-1.5 pl-8 pr-3 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
           />
         </div>
-        <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-zinc-400">
+        <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
           <input
             type="checkbox"
             checked={showDebug}
             onChange={(e) => onToggleDebug(e.target.checked)}
-            className="rounded border-zinc-700 bg-zinc-900"
+            className="rounded border-input bg-card"
           />
           Debug
         </label>
@@ -80,7 +80,7 @@ export const FilterBar = ({
           type="button"
           onClick={onExpandAll}
           title="Expand all"
-          className="shrink-0 rounded-md border border-zinc-800 p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+          className="shrink-0 rounded-md border border-border p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
         >
           <ChevronsUpDown size={14} />
         </button>
@@ -88,7 +88,7 @@ export const FilterBar = ({
           type="button"
           onClick={onCollapseAll}
           title="Collapse all"
-          className="shrink-0 rounded-md border border-zinc-800 p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+          className="shrink-0 rounded-md border border-border p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
         >
           <ChevronsDownUp size={14} />
         </button>
@@ -112,7 +112,7 @@ export const FilterBar = ({
           <button
             type="button"
             onClick={onClearTypes}
-            className="ml-1 flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium text-zinc-500 hover:text-zinc-300"
+            className="ml-1 flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground hover:text-foreground"
           >
             <X size={11} /> clear
           </button>

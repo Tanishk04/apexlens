@@ -10,18 +10,18 @@ interface Props {
 
 // Muted event-name colors by coarse category (raw view stays low-key).
 const EVENT_COLOR: Record<string, string> = {
-  SOQL: 'text-green-400',
-  SOSL: 'text-green-400',
-  DML: 'text-emerald-400',
-  CALLOUT: 'text-sky-400',
-  FLOW: 'text-cyan-400',
-  WORKFLOW: 'text-teal-400',
-  VALIDATION: 'text-yellow-400',
-  VF: 'text-pink-400',
-  METHOD: 'text-purple-400',
-  CODE_UNIT: 'text-amber-400',
-  SYSTEM: 'text-zinc-400',
-  GENERIC: 'text-zinc-500',
+  SOQL: 'text-soql',
+  SOSL: 'text-soql',
+  DML: 'text-dml',
+  CALLOUT: 'text-callout',
+  FLOW: 'text-flow',
+  WORKFLOW: 'text-workflow',
+  VALIDATION: 'text-validation',
+  VF: 'text-vf',
+  METHOD: 'text-method',
+  CODE_UNIT: 'text-code-unit',
+  SYSTEM: 'text-muted-foreground',
+  GENERIC: 'text-muted-foreground',
 };
 
 export const RawTreeView = ({ lines }: Props) => {
@@ -60,26 +60,26 @@ export const RawTreeView = ({ lines }: Props) => {
     setCollapsed(new Set(allRows.filter((r) => r.expandable).map((r) => r.id)));
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-zinc-950">
-      <div className="flex shrink-0 items-center gap-2 border-b border-zinc-800/60 px-3 py-2">
+    <div className="flex h-full min-h-0 flex-col bg-background">
+      <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
         <div className="relative flex-1">
-          <Search className="pointer-events-none absolute left-2.5 top-2 h-3.5 w-3.5 text-zinc-500" />
+          <Search className="pointer-events-none absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
           <input
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Filter raw events…"
-            className="w-full rounded-md border border-zinc-800 bg-zinc-950 py-1.5 pl-8 pr-3 text-sm text-zinc-200 placeholder:text-zinc-600 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="w-full rounded-md border border-border bg-background py-1.5 pl-8 pr-3 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
           />
         </div>
-        <span className="shrink-0 text-xs text-zinc-500">
+        <span className="shrink-0 text-xs text-muted-foreground">
           {rows.length.toLocaleString()} / {allRows.length.toLocaleString()} events
         </span>
         <button
           type="button"
           onClick={() => setCollapsed(new Set())}
           title="Expand all"
-          className="shrink-0 rounded-md border border-zinc-800 p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+          className="shrink-0 rounded-md border border-border p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
         >
           <ChevronsUpDown size={14} />
         </button>
@@ -87,7 +87,7 @@ export const RawTreeView = ({ lines }: Props) => {
           type="button"
           onClick={collapseAll}
           title="Collapse all"
-          className="shrink-0 rounded-md border border-zinc-800 p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+          className="shrink-0 rounded-md border border-border p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
         >
           <ChevronsDownUp size={14} />
         </button>
@@ -110,14 +110,14 @@ export const RawTreeView = ({ lines }: Props) => {
                   height: vr.size,
                   transform: `translateY(${vr.start}px)`,
                 }}
-                className="flex items-center gap-2 whitespace-nowrap pr-4 hover:bg-zinc-900/50"
+                className="flex items-center gap-2 whitespace-nowrap pr-4 hover:bg-accent/60"
               >
                 <div className="shrink-0" style={{ width: `${row.depth * 16 + 8}px` }} />
                 {row.expandable && !query ? (
                   <button
                     type="button"
                     onClick={() => toggle(row.id)}
-                    className="shrink-0 rounded p-0.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
+                    className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
                     aria-label={collapsed.has(row.id) ? 'Expand' : 'Collapse'}
                   >
                     <ChevronRight
@@ -130,9 +130,9 @@ export const RawTreeView = ({ lines }: Props) => {
                 )}
                 <span className={`shrink-0 ${color}`}>{row.event}</span>
                 {row.lineNumber ? (
-                  <span className="shrink-0 text-zinc-600">[{row.lineNumber}]</span>
+                  <span className="shrink-0 text-muted-foreground/70">[{row.lineNumber}]</span>
                 ) : null}
-                <span className="text-zinc-400">{row.payload}</span>
+                <span className="text-muted-foreground">{row.payload}</span>
               </div>
             );
           })}

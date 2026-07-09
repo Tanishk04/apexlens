@@ -77,13 +77,13 @@ export function VirtualTable<T>({
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* header */}
-      <div className="flex shrink-0 items-center gap-3 border-b border-zinc-800 bg-zinc-900/60 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
+      <div className="flex shrink-0 items-center gap-3 border-b border-border bg-card/60 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
         {columns.map((col) => (
           <button
             key={col.key}
             type="button"
             onClick={() => toggleSort(col.key)}
-            className={`flex items-center gap-1 hover:text-zinc-300 ${cellClass(col)}`}
+            className={`flex items-center gap-1 hover:text-foreground ${cellClass(col)}`}
           >
             <span className="truncate">{col.header}</span>
             {sortKey === col.key ? (
@@ -99,7 +99,7 @@ export function VirtualTable<T>({
 
       {/* body */}
       {sorted.length === 0 ? (
-        <div className="flex flex-1 items-center justify-center text-sm text-zinc-600">
+        <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground/70">
           {emptyLabel}
         </div>
       ) : (
@@ -118,7 +118,7 @@ export function VirtualTable<T>({
                     height: vr.size,
                     transform: `translateY(${vr.start}px)`,
                   }}
-                  className="flex items-center gap-3 border-b border-zinc-900 px-4 text-sm text-zinc-300 hover:bg-zinc-900/50"
+                  className="flex items-center gap-3 border-b border-border/40 px-4 text-sm text-foreground hover:bg-accent/60"
                 >
                   {columns.map((col) => (
                     <div

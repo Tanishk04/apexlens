@@ -6,11 +6,17 @@ interface TimelineProps {
   root: ExecutionNode | null;
   selectedId: string | null;
   onSelect: (id: string) => void;
+  /** Current theme; triggers a redraw with the active CSS palette. */
+  theme?: string;
 }
 
 const ROW_H = 18;
 const RULER_H = 24;
-const BG = '#09090b';
+
+/** Resolve a CSS custom property against the active theme. */
+function token(name: string, fallback: string): string {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+}
 
 interface Tip {
   left: number;
@@ -35,7 +41,7 @@ function fmtNs(ns: number): string {
   return (ns / 1000).toFixed(0) + ' µs';
 }
 
-export const Timeline = ({ root, selectedId, onSelect }: TimelineProps) => {
+export const Timeline = ({ root, selectedId, onSelect, theme }: TimelineProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [tip, setTip] = useState<Tip | null>(null);
@@ -80,16 +86,16 @@ export const Timeline = ({ root, selectedId, onSelect }: TimelineProps) => {
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = BG;
+    ctx.fillStyle = token('--background', '#09090b');
     ctx.fillRect(0, 0, w, h);
 
     // Ruler
-    ctx.fillStyle = '#18181b';
+    ctx.fillStyle = token('--card', '#18181b');
     ctx.fillRect(0, 0, w, RULER_H);
     const interval = niceInterval(nsPerPx, 90);
     const firstTick = Math.ceil(startNs / interval) * interval;
-    ctx.fillStyle = '#71717a';
-    ctx.strokeStyle = '#27272a';
+    ctx.fillStyle = token('--muted-foreground', '#71717a');
+    ctx.strokeStyle = token('--border', '#27272a');
     ctx.font = '10px ui-monospace, monospace';
     ctx.lineWidth = 1;
     for (let t = firstTick; ; t += interval) {
@@ -124,7 +130,7 @@ export const Timeline = ({ root, selectedId, onSelect }: TimelineProps) => {
         ctx.strokeRect(x + 0.5, y + 0.5, wRect - 1, ROW_H - 2);
       }
       if (isSel) {
-        ctx.strokeStyle = '#ffffff';
+        ctx.strokeStyle = token('--foreground', '#ffffff');
         ctx.lineWidth = 1.5;
         ctx.strokeRect(x + 0.75, y + 0.75, wRect - 1.5, ROW_H - 2.5);
         ctx.lineWidth = 1;
@@ -190,7 +196,7 @@ export const Timeline = ({ root, selectedId, onSelect }: TimelineProps) => {
 
   useEffect(() => {
     scheduleDraw();
-  }, [selectedId, scheduleDraw]);
+  }, [selectedId, theme, scheduleDraw]);
 
   const hitTest = useCallback(
     (mx: number, my: number): FlameRect | null => {
@@ -285,8 +291,8 @@ export const Timeline = ({ root, selectedId, onSelect }: TimelineProps) => {
   const empty = layout.rects.length === 0;
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col bg-zinc-950">
-      <div className="flex shrink-0 items-center justify-between border-b border-zinc-800/60 px-3 py-1.5 text-xs text-zinc-500">
+    <div className="relative flex h-full min-h-0 flex-col bg-background">
+      <div className="flex shrink-0 items-center justify-between border-b border-border px-3 py-1.5 text-xs text-muted-foreground">
         <span>Scroll to zoom · drag to pan · click a frame to inspect</span>
         <button
           type="button"
@@ -294,14 +300,14 @@ export const Timeline = ({ root, selectedId, onSelect }: TimelineProps) => {
             fit();
             scheduleDraw();
           }}
-          className="rounded border border-zinc-800 px-2 py-0.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+          className="rounded border border-border px-2 py-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
         >
           Reset zoom
         </button>
       </div>
       <div ref={containerRef} className="relative min-h-0 flex-1 overflow-hidden">
         {empty ? (
-          <div className="flex h-full items-center justify-center text-sm text-zinc-600">
+          <div className="flex h-full items-center justify-center text-sm text-muted-foreground/70">
             No timed execution events to chart.
           </div>
         ) : (
@@ -318,7 +324,7 @@ export const Timeline = ({ root, selectedId, onSelect }: TimelineProps) => {
         )}
         {tip ? (
           <div
-            className="pointer-events-none absolute z-10 max-w-xs rounded-md border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-xs shadow-lg"
+            className="pointer-events-none absolute z-10 max-w-xs rounded-md border border-input bg-card px-2.5 py-1.5 text-xs shadow-lg"
             style={{ left: tip.left, top: tip.top }}
           >
             <div className="mb-0.5 flex items-center gap-1.5">
@@ -326,12 +332,12 @@ export const Timeline = ({ root, selectedId, onSelect }: TimelineProps) => {
                 className="inline-block h-2 w-2 rounded-sm"
                 style={{ backgroundColor: flameColor(tip.rect.type) }}
               />
-              <span className="font-semibold uppercase tracking-wide text-zinc-400">
+              <span className="font-semibold uppercase tracking-wide text-muted-foreground">
                 {tip.rect.type}
               </span>
             </div>
-            <div className="break-words font-mono text-zinc-200">{tip.rect.name}</div>
-            <div className="mt-1 font-mono text-zinc-500">
+            <div className="break-words font-mono text-foreground">{tip.rect.name}</div>
+            <div className="mt-1 font-mono text-muted-foreground">
               {fmtNs(tip.rect.end - tip.rect.start)}
               {tip.rect.lineNumber ? ` · line ${tip.rect.lineNumber}` : ''}
               {tip.rect.unclosed ? ' · unclosed' : ''}

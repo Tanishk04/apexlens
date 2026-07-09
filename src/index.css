@@ -1,4 +1,114 @@
-@import "tailwindcss";
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/jetbrains-mono';
+@import 'tailwindcss';
+
+/*
+ * shadcn-style semantic tokens. Light is the default (:root); .dark on <html>
+ * switches the palette. Components use ONLY semantic classes (bg-background,
+ * text-muted-foreground, border-border, …) so both themes stay legible.
+ */
+:root {
+  --background: #ffffff;
+  --foreground: #09090b;
+  --card: #fafafa;
+  --card-foreground: #09090b;
+  --muted: #f4f4f5;
+  --muted-foreground: #71717a;
+  --border: #e4e4e7;
+  --input: #e4e4e7;
+  --primary: #18181b;
+  --primary-foreground: #fafafa;
+  --accent: #f4f4f5;
+  --accent-foreground: #18181b;
+  --destructive: #dc2626;
+  --ring: #a1a1aa;
+  --radius: 0.375rem;
+
+  /* Event-type accents (WCAG-legible on light surfaces). */
+  --c-code-unit: #b45309;
+  --c-method: #7c3aed;
+  --c-trigger: #c2410c;
+  --c-flow: #0e7490;
+  --c-workflow: #0f766e;
+  --c-soql: #15803d;
+  --c-dml: #047857;
+  --c-callout: #0369a1;
+  --c-validation: #a16207;
+  --c-vf: #be185d;
+  --c-debug: #1d4ed8;
+  --c-error: #dc2626;
+  --c-warn: #ca8a04;
+  --c-system: #52525b;
+}
+
+.dark {
+  --background: #09090b;
+  --foreground: #e4e4e7;
+  --card: #18181b;
+  --card-foreground: #e4e4e7;
+  --muted: #27272a;
+  --muted-foreground: #a1a1aa;
+  --border: #27272a;
+  --input: #3f3f46;
+  --primary: #fafafa;
+  --primary-foreground: #18181b;
+  --accent: #27272a;
+  --accent-foreground: #fafafa;
+  --destructive: #ef4444;
+  --ring: #52525b;
+
+  --c-code-unit: #fbbf24;
+  --c-method: #c084fc;
+  --c-trigger: #fb923c;
+  --c-flow: #22d3ee;
+  --c-workflow: #2dd4bf;
+  --c-soql: #4ade80;
+  --c-dml: #34d399;
+  --c-callout: #38bdf8;
+  --c-validation: #facc15;
+  --c-vf: #f472b6;
+  --c-debug: #60a5fa;
+  --c-error: #f87171;
+  --c-warn: #facc15;
+  --c-system: #a1a1aa;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-ring: var(--ring);
+
+  --color-code-unit: var(--c-code-unit);
+  --color-method: var(--c-method);
+  --color-trigger: var(--c-trigger);
+  --color-flow: var(--c-flow);
+  --color-workflow: var(--c-workflow);
+  --color-soql: var(--c-soql);
+  --color-dml: var(--c-dml);
+  --color-callout: var(--c-callout);
+  --color-validation: var(--c-validation);
+  --color-vf: var(--c-vf);
+  --color-debug: var(--c-debug);
+  --color-error: var(--c-error);
+  --color-warn: var(--c-warn);
+  --color-system: var(--c-system);
+
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
+
+  --radius-md: var(--radius);
+}
 
 @layer base {
   html,
@@ -8,7 +118,11 @@
     margin: 0;
   }
 
+  html {
+    font-size: 13px;
+  }
+
   body {
-    @apply bg-zinc-950 text-zinc-300 antialiased;
+    @apply bg-background font-sans text-foreground antialiased;
   }
 }

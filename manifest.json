@@ -3,9 +3,7 @@
   "name": "Salesforce Debug Log Assistant",
   "version": "1.0.0",
   "description": "Next-Generation Salesforce Debug Log Assistant",
-  "action": {
-    "default_popup": "src/popup/index.html"
-  },
+  "action": {},
   "permissions": [
     "cookies",
     "storage",
@@ -33,6 +31,18 @@
     "service_worker": "src/background/index.ts",
     "type": "module"
   },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.salesforce.com/*",
+        "https://*.force.com/*",
+        "https://*.salesforce-setup.com/*"
+      ],
+      "js": ["src/content/debugLogs.ts"],
+      "all_frames": true,
+      "run_at": "document_idle"
+    }
+  ],
   "web_accessible_resources": [
     {
       "resources": ["src/app/index.html"],
