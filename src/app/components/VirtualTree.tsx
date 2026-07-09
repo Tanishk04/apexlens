@@ -1,5 +1,6 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { computeMatches, splitByMatch, type FindState } from '../utils/find';
 import {
   ChevronRight,
   Database,
@@ -25,6 +26,9 @@ interface VirtualTreeProps {
   onToggle: (id: string) => void;
   /** When set, scroll this row into view (error-first navigation). */
   scrollToId?: string | null;
+  /** In-app find state (matches on row names). */
+  find?: FindState;
+  onMatches?: (count: number) => void;
 }
 
 const TYPE_STYLE: Record<string, { color: string; badge: string; Icon: typeof Database }> = {
@@ -59,6 +63,8 @@ export const VirtualTree = ({
   onSelect,
   onToggle,
   scrollToId,
+  find,
+  onMatches,
 }: VirtualTreeProps) => {
   const parentRef = useRef<HTMLDivElement>(null);
 
@@ -75,6 +81,23 @@ export const VirtualTree = ({
     if (index >= 0) rowVirtualizer.scrollToIndex(index, { align: 'center' });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scrollToId, nodes]);
+
+  // In-app find over visible row names.
+  const names = useMemo(() => nodes.map((n) => n.name), [nodes]);
+  const matches = useMemo(
+    () => (find ? computeMatches(names, find.query, find.caseSensitive) : []),
+    [names, find],
+  );
+  useEffect(() => {
+    onMatches?.(matches.length);
+  }, [matches, onMatches]);
+
+  const activeRow =
+    find && matches.length > 0 ? matches[find.index % matches.length]! : -1;
+  useEffect(() => {
+    if (activeRow >= 0) rowVirtualizer.scrollToIndex(activeRow, { align: 'center' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeRow]);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -163,7 +186,24 @@ export const VirtualTree = ({
                     : 'text-foreground'
                 }`}
               >
-                {node.name}
+                {find?.query
+                  ? splitByMatch(node.name, find.query, find.caseSensitive).map((seg, i) =>
+                      seg.match ? (
+                        <mark
+                          key={i}
+                          className={`rounded-sm px-0 ${
+                            virtualRow.index === activeRow
+                              ? 'bg-warn text-background'
+                              : 'bg-warn/40 text-foreground'
+                          }`}
+                        >
+                          {seg.text}
+                        </mark>
+                      ) : (
+                        <span key={i}>{seg.text}</span>
+                      ),
+                    )
+                  : node.name}
               </span>
 
               {node.lineNumber ? (

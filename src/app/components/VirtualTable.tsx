@@ -37,6 +37,8 @@ export function VirtualTable<T>({
   const parentRef = useRef<HTMLDivElement>(null);
   const [sortKey, setSortKey] = useState(initialSort ?? columns[0]!.key);
   const [dir, setDir] = useState<'asc' | 'desc'>(initialDir);
+  // Rows expanded to show full (wrapped) content of the grow column.
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const sorted = useMemo(() => {
     const col = columns.find((c) => c.key === sortKey);
@@ -55,6 +57,8 @@ export function VirtualTable<T>({
     getScrollElement: () => parentRef.current,
     estimateSize: () => 30,
     overscan: 20,
+    // Dynamic heights so an expanded row grows with its wrapped content.
+    measureElement: (el) => el.getBoundingClientRect().height,
   });
 
   function toggleSort(key: string) {
@@ -63,6 +67,15 @@ export function VirtualTable<T>({
       setSortKey(key);
       setDir('desc');
     }
+  }
+
+  function toggleExpand(key: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   }
 
   function cellClass(col: Column<T>): string {
@@ -107,25 +120,43 @@ export function VirtualTable<T>({
           <div style={{ height: rowVirtualizer.getTotalSize(), position: 'relative' }}>
             {rowVirtualizer.getVirtualItems().map((vr) => {
               const row = sorted[vr.index]!;
+              const key = getKey(row, vr.index);
+              const isExpanded = expanded.has(key);
               return (
                 <div
-                  key={getKey(row, vr.index)}
+                  key={key}
+                  ref={rowVirtualizer.measureElement}
+                  data-index={vr.index}
+                  onClick={() => toggleExpand(key)}
                   style={{
                     position: 'absolute',
                     top: 0,
                     left: 0,
                     width: '100%',
-                    height: vr.size,
                     transform: `translateY(${vr.start}px)`,
                   }}
-                  className="flex items-center gap-3 border-b border-border/40 px-4 text-sm text-foreground hover:bg-accent/60"
+                  title={isExpanded ? undefined : 'Click to expand'}
+                  className={`flex cursor-pointer gap-3 border-b border-border/40 px-4 text-sm text-foreground hover:bg-accent/60 ${
+                    isExpanded ? 'items-start bg-accent/30 py-1.5' : 'items-center py-1'
+                  }`}
                 >
                   {columns.map((col) => (
                     <div
                       key={col.key}
-                      className={`flex items-center overflow-hidden whitespace-nowrap ${cellClass(col)}`}
+                      title={col.grow && !isExpanded ? String(col.get(row)) : undefined}
+                      className={`flex overflow-hidden ${
+                        isExpanded && col.grow ? 'items-start' : 'items-center'
+                      } ${cellClass(col)}`}
                     >
-                      <span className="truncate">{col.render ? col.render(row) : col.get(row)}</span>
+                      <span
+                        className={
+                          isExpanded && col.grow
+                            ? 'whitespace-normal break-words'
+                            : 'truncate'
+                        }
+                      >
+                        {col.render ? col.render(row) : col.get(row)}
+                      </span>
                     </div>
                   ))}
                 </div>

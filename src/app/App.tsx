@@ -13,8 +13,9 @@ import {
   DmlAnalysis,
   FlowAnalysis,
 } from './components/AnalysisView';
-import { RawLogView } from './components/RawLogView';
+import { LogExplorerView } from './components/LogExplorerView';
 import { RawTreeView } from './components/RawTreeView';
+import { FindBar } from './components/FindBar';
 import { DebugView } from './components/DebugView';
 import { AiView } from './components/AiView';
 import { SummaryView } from './components/SummaryView';
@@ -74,6 +75,13 @@ const App = () => {
   const [scrollToId, setScrollToId] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [theme, toggleTheme] = useTheme();
+
+  // In-app Find (Ctrl/Cmd+F).
+  const [findOpen, setFindOpen] = useState(false);
+  const [findQuery, setFindQuery] = useState('');
+  const [findCase, setFindCase] = useState(false);
+  const [findIndex, setFindIndex] = useState(0);
+  const [matchCount, setMatchCount] = useState(0);
   const [ai, setAi] = useState<{ loading: boolean; result: string | null; error: string | null }>({
     loading: false,
     result: null,
@@ -246,17 +254,39 @@ const App = () => {
   const collapseAll = () =>
     setCollapsed(new Set(collectExpandableIds(parsedLog?.executionTree ?? null)));
 
-  // ⌘K / Ctrl+K toggles the command palette.
+  // Global shortcuts: Ctrl/Cmd+K palette, Ctrl/Cmd+F in-app find.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setPaletteOpen((o) => !o);
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') {
+        // Replace the browser's find with the in-app one.
+        e.preventDefault();
+        setFindOpen(true);
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
+
+  const findSupported = tab === 'explorer' || tab === 'rawtree' || tab === 'tree';
+  const find = useMemo(
+    () => ({ query: findOpen && findSupported ? findQuery : '', caseSensitive: findCase, index: findIndex }),
+    [findOpen, findSupported, findQuery, findCase, findIndex],
+  );
+  const onMatches = useCallback((n: number) => {
+    setMatchCount(n);
+    setFindIndex((i) => (n === 0 ? 0 : Math.min(i, n - 1)));
+  }, []);
+  const findNext = useCallback(
+    () => setFindIndex((i) => (matchCount ? (i + 1) % matchCount : 0)),
+    [matchCount],
+  );
+  const findPrev = useCallback(
+    () => setFindIndex((i) => (matchCount ? (i - 1 + matchCount) % matchCount : 0)),
+    [matchCount],
+  );
 
   const commands = useMemo<PaletteCommand[]>(() => {
     const go = (id: MainTab, label: string): PaletteCommand => ({
@@ -278,6 +308,7 @@ const App = () => {
       go('governor', 'Governor'),
       go('summary', 'Summary'),
       { id: 'tab-ai', label: 'Analyze log with AI', hint: 'ai', run: () => setTab('ai') },
+      { id: 'find', label: 'Find in log', hint: 'Ctrl F', run: () => setFindOpen(true) },
       { id: 'theme', label: 'Toggle light/dark theme', hint: 'view', run: toggleTheme },
       { id: 'expand', label: 'Expand all', hint: 'tree', run: expandAll },
       { id: 'collapse', label: 'Collapse all', hint: 'tree', run: collapseAll },
@@ -369,7 +400,26 @@ const App = () => {
       ) : null}
 
       {parsedLog ? (
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+        <FindBar
+          open={findOpen}
+          query={findQuery}
+          caseSensitive={findCase}
+          matchCount={findSupported ? matchCount : 0}
+          index={findIndex}
+          supported={findSupported}
+          onQuery={(q) => {
+            setFindQuery(q);
+            setFindIndex(0);
+          }}
+          onToggleCase={() => {
+            setFindCase((c) => !c);
+            setFindIndex(0);
+          }}
+          onNext={findNext}
+          onPrev={findPrev}
+          onClose={() => setFindOpen(false)}
+        />
         <div className="min-h-0 min-w-0 flex-1">
           {tab === 'tree' ? (
             treeNodes.length > 0 ? (
@@ -379,6 +429,8 @@ const App = () => {
                 onSelect={setSelectedId}
                 onToggle={toggleNode}
                 scrollToId={scrollToId}
+                find={find}
+                onMatches={onMatches}
               />
             ) : (
               <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -407,13 +459,18 @@ const App = () => {
           ) : tab === 'debug' ? (
             <DebugView lines={parsedLog?.eventLines ?? []} />
           ) : tab === 'rawtree' ? (
-            <RawTreeView lines={parsedLog?.eventLines ?? []} />
+            <RawTreeView
+              lines={parsedLog?.eventLines ?? []}
+              find={find}
+              onMatches={onMatches}
+              theme={theme}
+            />
           ) : tab === 'summary' ? (
             <SummaryView log={parsedLog} analysis={analysis} />
           ) : tab === 'ai' ? (
             <AiView log={parsedLog} analysis={analysis} rawLog={rawLog} ai={ai} onRun={runAi} />
           ) : (
-            <RawLogView lines={parsedLog?.eventLines ?? []} />
+            <LogExplorerView rawLog={rawLog} find={find} onMatches={onMatches} theme={theme} />
           )}
         </div>
 

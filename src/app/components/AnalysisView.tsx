@@ -20,17 +20,17 @@ const soqlColumns: Column<SoqlRow>[] = [
     grow: true,
     mono: true,
     render: (r) => (
-      <span className="flex items-center gap-2">
+      <>
         {r.inLoop ? (
           <span
-            className="inline-flex shrink-0 items-center gap-1 rounded bg-warn/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-validation"
+            className="mr-2 inline-flex shrink-0 items-center gap-1 rounded bg-warn/10 px-1.5 py-0.5 align-middle text-[10px] font-semibold uppercase text-validation"
             title="Executed multiple times at the same line — likely SOQL in a loop"
           >
             <AlertTriangle size={10} /> loop
           </span>
         ) : null}
-        <span className="truncate">{r.query}</span>
-      </span>
+        {r.query}
+      </>
     ),
   },
   { key: 'count', header: 'Count', get: (r) => r.count, align: 'right', mono: true, width: 'w-20' },

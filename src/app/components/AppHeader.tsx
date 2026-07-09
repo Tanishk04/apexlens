@@ -1,6 +1,7 @@
 import React from 'react';
-import { Activity, FolderOpen, Sun, Moon, Command } from 'lucide-react';
+import { Activity, FolderOpen, Sun, Moon } from 'lucide-react';
 import type { LogMetrics } from '../../types';
+import { shortcutLabel } from '../utils/platform';
 
 export interface LogMeta {
   name: string;
@@ -67,8 +68,13 @@ export const AppHeader = ({
           >
             {theme === 'dark' ? <Sun size={13} /> : <Moon size={13} />}
           </button>
-          <button type="button" onClick={onOpenPalette} title="Command palette (⌘K)" className={iconBtn}>
-            <Command size={13} /> K
+          <button
+            type="button"
+            onClick={onOpenPalette}
+            title={`Command palette (${shortcutLabel('K')})`}
+            className={iconBtn}
+          >
+            {shortcutLabel('K')}
           </button>
         </div>
       </div>
