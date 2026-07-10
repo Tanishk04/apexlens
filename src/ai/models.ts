@@ -70,13 +70,38 @@ const OPENROUTER_FALLBACK: ModelOption[] = [
   { id: 'openai/gpt-4o-mini', label: 'GPT-4o mini', free: false },
 ];
 
-const CACHE_KEY = 'sfda_openrouter_models';
+const CACHE_KEY = 'sfda_openrouter_models_v2'; // v2: text-chat filter applied
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 
-interface OpenRouterModel {
+export interface OpenRouterModel {
   id: string;
   name?: string;
   pricing?: { prompt?: string; completion?: string };
+  architecture?: {
+    input_modalities?: string[];
+    output_modalities?: string[];
+    modality?: string;
+  };
+}
+
+/**
+ * Keep only text-in / text-out chat models — drops image-generation (output
+ * `image`), TTS (output `audio`), and embedding models that can't run our
+ * chat-completion analysis. Tolerant: models with no architecture info are kept.
+ */
+export function isTextChatModel(m: OpenRouterModel): boolean {
+  const a = m.architecture;
+  if (!a) return true;
+  const parsed = a.modality?.split('->') ?? [];
+  const input = a.input_modalities ?? parsed[0]?.split('+') ?? [];
+  const output = a.output_modalities ?? parsed[1]?.split('+') ?? [];
+  // Input may be multimodal (vision is fine). Output must be text ONLY —
+  // reject anything that also emits images or audio (image-gen / TTS models).
+  const inOk = input.length === 0 || input.includes('text');
+  const outOk =
+    output.length === 0 ||
+    (output.includes('text') && !output.some((o) => o === 'image' || o === 'audio'));
+  return inOk && outOk;
 }
 
 /**
@@ -99,6 +124,7 @@ export async function fetchOpenRouterModels(): Promise<ModelOption[]> {
     if (!res.ok) throw new Error(String(res.status));
     const data = (await res.json()) as { data?: OpenRouterModel[] };
     const models: ModelOption[] = (data.data ?? [])
+      .filter(isTextChatModel)
       .map((m) => {
         const free =
           m.id.endsWith(':free') ||

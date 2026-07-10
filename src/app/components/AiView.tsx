@@ -55,8 +55,14 @@ export const AiView = ({ log, analysis, rawLog, ai, onRun }: Props) => {
     return meta.models.map((id) => ({ id, label: id, free: false }));
   }, [providerId, openRouterModels, meta]);
 
-  // Effective model: picklist choice, or the custom text input.
-  const model = modelChoice === CUSTOM_MODEL ? customModel : modelChoice || options[0]?.id || '';
+  // Effective model id. OpenRouter: picklist choice (or the custom escape).
+  // Other providers: the free-text value, defaulting to the first curated id.
+  const model =
+    providerId === 'openrouter'
+      ? modelChoice === CUSTOM_MODEL
+        ? customModel
+        : modelChoice || options[0]?.id || ''
+      : modelChoice || meta.models[0] || '';
 
   // Rough token estimate for the full prompt (raw log + structured summary).
   const tokenEstimate = useMemo(() => {
@@ -126,21 +132,39 @@ export const AiView = ({ log, analysis, rawLog, ai, onRun }: Props) => {
 
             <label className="block text-xs text-muted-foreground">
               Model
-              <select
-                value={modelChoice || options[0]?.id || ''}
-                onChange={(e) => setModelChoice(e.target.value)}
-                className={selectCls}
-              >
-                {options.length === 0 && providerId === 'openrouter' ? (
-                  <option value="">Loading models…</option>
-                ) : null}
-                {options.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.label}
-                  </option>
-                ))}
-                <option value={CUSTOM_MODEL}>Custom model id…</option>
-              </select>
+              {providerId === 'openrouter' ? (
+                // Filtered live catalog (text-chat models only) as a picklist.
+                <select
+                  value={modelChoice || options[0]?.id || ''}
+                  onChange={(e) => setModelChoice(e.target.value)}
+                  className={selectCls}
+                >
+                  {options.length === 0 ? <option value="">Loading models…</option> : null}
+                  {options.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.label}
+                    </option>
+                  ))}
+                  <option value={CUSTOM_MODEL}>Custom model id…</option>
+                </select>
+              ) : (
+                // Other providers: free-form model id with curated suggestions.
+                <>
+                  <input
+                    type="text"
+                    list={`models-${providerId}`}
+                    value={modelChoice}
+                    onChange={(e) => setModelChoice(e.target.value)}
+                    placeholder={meta.models[0] ?? 'model-id'}
+                    className={`${inputCls} font-mono`}
+                  />
+                  <datalist id={`models-${providerId}`}>
+                    {meta.models.map((id) => (
+                      <option key={id} value={id} />
+                    ))}
+                  </datalist>
+                </>
+              )}
             </label>
 
             <label className="block text-xs text-muted-foreground">
@@ -154,7 +178,7 @@ export const AiView = ({ log, analysis, rawLog, ai, onRun }: Props) => {
               />
             </label>
 
-            {modelChoice === CUSTOM_MODEL ? (
+            {providerId === 'openrouter' && modelChoice === CUSTOM_MODEL ? (
               <label className="block text-xs text-muted-foreground">
                 Custom model id
                 <input
