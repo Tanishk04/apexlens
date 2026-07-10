@@ -19,6 +19,8 @@ const CUSTOM_MODEL = '__custom__';
 
 const inputCls =
   'mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground focus:border-ring focus:outline-none';
+// Selects: reserve room for the native arrow and ellipsize long option text.
+const selectCls = `${inputCls} truncate pr-7`;
 
 export const AiView = ({ log, analysis, rawLog, ai, onRun }: Props) => {
   const [providerId, setProviderId] = useState(
@@ -86,9 +88,9 @@ export const AiView = ({ log, analysis, rawLog, ai, onRun }: Props) => {
 
   return (
     <div className="h-full overflow-auto bg-background">
-      <div className="w-full space-y-5 p-6">
-        {/* config (form kept to a readable width; result spans full width) */}
-        <section className="max-w-3xl rounded-lg border border-border bg-card/40 p-4">
+      <div className="mx-auto w-full max-w-5xl space-y-5 p-6">
+        {/* config + result share one centered column so nothing looks orphaned */}
+        <section className="rounded-lg border border-border bg-card/40 p-4">
           <div className="mb-3 flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <Sparkles size={16} className="text-vf" />
@@ -112,7 +114,7 @@ export const AiView = ({ log, analysis, rawLog, ai, onRun }: Props) => {
               <select
                 value={providerId}
                 onChange={(e) => changeProvider(e.target.value)}
-                className={inputCls}
+                className={selectCls}
               >
                 {PROVIDER_META.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -127,7 +129,7 @@ export const AiView = ({ log, analysis, rawLog, ai, onRun }: Props) => {
               <select
                 value={modelChoice || options[0]?.id || ''}
                 onChange={(e) => setModelChoice(e.target.value)}
-                className={inputCls}
+                className={selectCls}
               >
                 {options.length === 0 && providerId === 'openrouter' ? (
                   <option value="">Loading models…</option>
