@@ -9,6 +9,8 @@ interface Props {
   find: FindState;
   onMatches: (count: number) => void;
   theme?: string;
+  /** 1-based raw-log line to scroll to and highlight (jump from another tab). */
+  scrollToLine?: number | null;
 }
 
 const ROW_H = 20;
@@ -31,7 +33,7 @@ const CLS_TO_VAR: Record<string, string> = {
 };
 
 /** Exact raw log text — verbatim lines, line numbers, color-coded, minimap. */
-export const LogExplorerView = ({ rawLog, find, onMatches, theme }: Props) => {
+export const LogExplorerView = ({ rawLog, find, onMatches, theme, scrollToLine }: Props) => {
   const parentRef = useRef<HTMLDivElement>(null);
 
   const lines = useMemo(() => (rawLog ? rawLog.split('\n') : []), [rawLog]);
@@ -73,6 +75,14 @@ export const LogExplorerView = ({ rawLog, find, onMatches, theme }: Props) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeLine]);
 
+  // Scroll to a line jumped to from Execution Tree / Detail Panel.
+  useEffect(() => {
+    if (!scrollToLine) return;
+    const index = scrollToLine - 1;
+    if (index >= 0 && index < lines.length) rowVirtualizer.scrollToIndex(index, { align: 'center' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scrollToLine, lines.length]);
+
   const numWidth = String(lines.length).length;
 
   if (lines.length === 0) {
@@ -90,6 +100,7 @@ export const LogExplorerView = ({ rawLog, find, onMatches, theme }: Props) => {
           {rowVirtualizer.getVirtualItems().map((vr) => {
             const line = lines[vr.index]!;
             const isActive = vr.index === activeLine;
+            const isJumped = vr.index + 1 === scrollToLine;
             const hasMatch = find.query && matches.includes(vr.index);
             return (
               <div
@@ -104,7 +115,11 @@ export const LogExplorerView = ({ rawLog, find, onMatches, theme }: Props) => {
                   transform: `translateY(${vr.start}px)`,
                 }}
                 className={`flex items-center whitespace-pre ${
-                  isActive ? 'bg-warn/15' : 'hover:bg-accent/40'
+                  isJumped
+                    ? 'bg-debug/15 ring-1 ring-inset ring-ring'
+                    : isActive
+                      ? 'bg-warn/15'
+                      : 'hover:bg-accent/40'
                 }`}
               >
                 <span

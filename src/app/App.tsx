@@ -76,6 +76,7 @@ const App = () => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tab, setTab] = useState<MainTab>('explorer');
   const [scrollToId, setScrollToId] = useState<string | null>(null);
+  const [scrollToLine, setScrollToLine] = useState<number | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [theme, toggleTheme] = useTheme();
 
@@ -186,6 +187,12 @@ const App = () => {
     },
     [parentMap, nodeIndex],
   );
+
+  /** Jump from a tree/detail row to its exact raw-log line in Log Explorer. */
+  const jumpToLine = useCallback((line: number) => {
+    setTab('explorer');
+    setScrollToLine(line);
+  }, []);
 
   /** One-shot whole-log AI analysis: full raw log + structured summary. */
   const runAi = useCallback(
@@ -470,6 +477,7 @@ const App = () => {
                 scrollToId={scrollToId}
                 find={find}
                 onMatches={onMatches}
+                onJumpToLine={jumpToLine}
               />
             ) : (
               <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -509,7 +517,13 @@ const App = () => {
           ) : tab === 'ai' ? (
             <AiView log={parsedLog} analysis={analysis} rawLog={rawLog} ai={ai} onRun={runAi} />
           ) : (
-            <LogExplorerView rawLog={rawLog} find={find} onMatches={onMatches} theme={theme} />
+            <LogExplorerView
+              rawLog={rawLog}
+              find={find}
+              onMatches={onMatches}
+              theme={theme}
+              scrollToLine={scrollToLine}
+            />
           )}
         </div>
 
@@ -518,6 +532,7 @@ const App = () => {
             selected={selected}
             exception={parsedLog?.exceptions.find((e) => e.id === selectedId) ?? null}
             onClose={() => setSelectedId(null)}
+            onJumpToLine={jumpToLine}
           />
         ) : null}
       </div>

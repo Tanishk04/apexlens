@@ -45,7 +45,10 @@ export interface StatementEvent {
   type: StatementType;
   event: string; // raw Salesforce event name
   timestamp: number;
+  /** Apex source line, from the log's own `[N]` token — NOT a raw-log line index. */
   lineNumber: number;
+  /** 1-based line index within the raw debug log text (for jump-to-log-line). */
+  rawLine: number;
   text: string;
   /** For VALIDATION_* statements. */
   validationResult?: 'PASS' | 'FAIL';
@@ -64,7 +67,10 @@ export interface ExecutionNode {
   name: string;
   timestamp: number; // nanoseconds
   durationNs: number;
+  /** Apex source line, from the log's own `[N]` token — NOT a raw-log line index. */
   lineNumber: number;
+  /** 1-based line index within the raw debug log text (for jump-to-log-line). */
+  rawLine: number;
 
   parentId: string | null;
   children: (ExecutionNode | StatementEvent)[];
@@ -103,6 +109,7 @@ export interface LogException {
   parentNodeId: string | null;
   timestamp: number;
   lineNumber: number;
+  rawLine: number;
 }
 
 export interface LimitMetric {
@@ -155,5 +162,7 @@ export interface LogToken {
   timestampNs: number;
   event: string;
   lineNumber: number;
+  /** 1-based line index within the raw debug log text; set by the parser as it scans lines. */
+  rawLine: number;
   payload: string;
 }

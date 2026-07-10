@@ -7,7 +7,7 @@ import {
   Search,
   Code2,
   AlertTriangle,
-  Bug,
+  Logs,
   Layers,
   GitBranch,
   Workflow,
@@ -16,6 +16,7 @@ import {
   ShieldCheck,
   Cog,
   Circle,
+  FileText,
 } from 'lucide-react';
 import type { FlatTreeNode } from '../utils/flattenTree';
 
@@ -29,6 +30,8 @@ interface VirtualTreeProps {
   /** In-app find state (matches on row names). */
   find?: FindState;
   onMatches?: (count: number) => void;
+  /** Jump to this row's raw-log line in Log Explorer. */
+  onJumpToLine: (line: number) => void;
 }
 
 const TYPE_STYLE: Record<string, { color: string; badge: string; Icon: typeof Database }> = {
@@ -48,7 +51,7 @@ const TYPE_STYLE: Record<string, { color: string; badge: string; Icon: typeof Da
   },
   VF: { color: 'text-vf', badge: 'bg-vf/15 text-vf', Icon: Layers },
   SYSTEM: { color: 'text-muted-foreground', badge: 'bg-muted text-foreground', Icon: Cog },
-  DEBUG: { color: 'text-debug', badge: 'bg-debug/15 text-debug', Icon: Bug },
+  DEBUG: { color: 'text-debug', badge: 'bg-debug/15 text-debug', Icon: Logs },
   EXCEPTION: { color: 'text-error', badge: 'bg-error/10 text-error', Icon: AlertTriangle },
   GENERIC: { color: 'text-muted-foreground', badge: 'bg-muted text-muted-foreground', Icon: Circle },
 };
@@ -65,6 +68,7 @@ export const VirtualTree = ({
   scrollToId,
   find,
   onMatches,
+  onJumpToLine,
 }: VirtualTreeProps) => {
   const parentRef = useRef<HTMLDivElement>(null);
 
@@ -207,7 +211,27 @@ export const VirtualTree = ({
               </span>
 
               {node.lineNumber ? (
-                <span className="shrink-0 text-xs text-muted-foreground/70">:{node.lineNumber}</span>
+                <span
+                  className="shrink-0 text-xs text-muted-foreground/70"
+                  title="Apex source line"
+                >
+                  :{node.lineNumber}
+                </span>
+              ) : null}
+
+              {node.rawLine ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelect(node.id);
+                    onJumpToLine(node.rawLine!);
+                  }}
+                  title={`Open line ${node.rawLine} in Log Explorer`}
+                  className="shrink-0 rounded p-0.5 text-muted-foreground/60 hover:bg-accent hover:text-debug"
+                >
+                  <FileText size={12} />
+                </button>
               ) : null}
 
               {/* metric columns (sticky right so they stay visible on h-scroll) */}

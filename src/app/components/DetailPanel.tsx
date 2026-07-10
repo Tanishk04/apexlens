@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, AlertTriangle } from 'lucide-react';
+import { X, AlertTriangle, FileText } from 'lucide-react';
 import type { ExecutionNode, StatementEvent, LogException } from '../../types';
 
 interface Props {
@@ -7,6 +7,8 @@ interface Props {
   /** Exception matching the selected row id, if any (shares statement id). */
   exception: LogException | null;
   onClose: () => void;
+  /** Jump to the selected row's raw-log line in Log Explorer. */
+  onJumpToLine: (line: number) => void;
 }
 
 function isExecutionNode(n: ExecutionNode | StatementEvent): n is ExecutionNode {
@@ -22,7 +24,7 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-export const DetailPanel = ({ selected, exception, onClose }: Props) => {
+export const DetailPanel = ({ selected, exception, onClose, onJumpToLine }: Props) => {
   if (!selected) return null;
 
   const node = isExecutionNode(selected) ? selected : null;
@@ -36,19 +38,31 @@ export const DetailPanel = ({ selected, exception, onClose }: Props) => {
           {node ? node.type : stmt!.type}
           <span className="font-normal text-muted-foreground">details</span>
         </span>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close details"
-          className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-        >
-          <X size={14} />
-        </button>
+        <div className="flex items-center gap-2">
+          {selected.rawLine ? (
+            <button
+              type="button"
+              onClick={() => onJumpToLine(selected.rawLine)}
+              title={`Open line ${selected.rawLine} in Log Explorer`}
+              className="flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:border-debug hover:text-debug"
+            >
+              <FileText size={12} /> Open in Log Explorer
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close details"
+            className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <X size={14} />
+          </button>
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto px-4 py-2">
         <div className="mb-2 flex flex-wrap gap-x-8 gap-y-2">
-          {selected.lineNumber ? <Field label="Line" value={selected.lineNumber} /> : null}
+          {selected.lineNumber ? <Field label="Apex line" value={selected.lineNumber} /> : null}
           {node ? (
             <>
               <Field label="Total" value={`${Math.round(node.durationNs / 1e6)} ms`} />

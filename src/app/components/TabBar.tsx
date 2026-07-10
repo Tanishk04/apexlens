@@ -5,7 +5,7 @@ import {
   LayoutDashboard,
   BarChart3,
   FileText,
-  Bug,
+  Logs,
   Network,
   Sparkles,
   Database,
@@ -39,7 +39,7 @@ interface Props {
 const TABS: { id: MainTab; label: string; Icon: typeof ListTree; color: string }[] = [
   { id: 'explorer', label: 'Log Explorer', Icon: FileText, color: 'text-code-unit' },
   { id: 'rawtree', label: 'Raw Tree', Icon: Network, color: 'text-system' },
-  { id: 'debug', label: 'Apex Debug', Icon: Bug, color: 'text-debug' },
+  { id: 'debug', label: 'Apex Debug', Icon: Logs, color: 'text-debug' },
   { id: 'timeline', label: 'Execution Timeline', Icon: GanttChartSquare, color: 'text-flow' },
   { id: 'tree', label: 'Execution Tree', Icon: ListTree, color: 'text-method' },
   { id: 'execution', label: 'Execution Analysis', Icon: BarChart3, color: 'text-trigger' },

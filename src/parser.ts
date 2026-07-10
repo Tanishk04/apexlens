@@ -73,6 +73,7 @@ export class Lexer {
       timestampNs: parseInt(match[2]!, 10),
       event: match[3]!,
       lineNumber: match[4] ? parseInt(match[4], 10) : 0,
+      rawLine: 0, // stamped by SalesforceLogParser.processLine with the real raw-log line index
       payload: match[5] ?? '',
     };
   }
@@ -109,6 +110,7 @@ export class TreeBuilder {
       timestamp: 0,
       durationNs: 0,
       lineNumber: 0,
+      rawLine: 0,
       parentId: null,
       children: [],
       synthetic: true,
@@ -125,7 +127,7 @@ export class TreeBuilder {
   }
 
   public processToken(token: LogToken): void {
-    const { event, payload, timestampNs, lineNumber } = token;
+    const { event, payload, timestampNs, lineNumber, rawLine } = token;
     if (this.firstTs < 0) this.firstTs = timestampNs;
     this.lastTs = timestampNs;
 
@@ -172,6 +174,7 @@ export class TreeBuilder {
         parentNodeId: parent.synthetic ? null : parent.id,
         timestamp: timestampNs,
         lineNumber,
+        rawLine,
       };
       this.exceptions.push(exc);
       const stmt: StatementEvent = {
@@ -180,6 +183,7 @@ export class TreeBuilder {
         event,
         timestamp: timestampNs,
         lineNumber,
+        rawLine,
         text: message,
       };
       parent.children.push(stmt);
@@ -227,6 +231,7 @@ export class TreeBuilder {
       event: token.event,
       timestamp: token.timestampNs,
       lineNumber: token.lineNumber,
+      rawLine: token.rawLine,
       text: formatEventLabel(token.event, token.payload),
     };
     this.top().children.push(stmt);
@@ -236,7 +241,7 @@ export class TreeBuilder {
   }
 
   private createNode(token: LogToken): ExecutionNode {
-    const { event, payload, timestampNs, lineNumber } = token;
+    const { event, payload, timestampNs, lineNumber, rawLine } = token;
     const node: ExecutionNode = {
       id: this.generateId(),
       type: entryNodeType(event),
@@ -245,6 +250,7 @@ export class TreeBuilder {
       timestamp: timestampNs,
       durationNs: 0,
       lineNumber,
+      rawLine,
       parentId: this.top().id,
       children: [],
     };
@@ -417,6 +423,8 @@ export class SalesforceLogParser {
       this.builder.appendContinuation(line);
       return;
     }
+
+    token.rawLine = this.lineCount;
 
     this.eventLines.push({
       id: `l${this.lineCount}`,

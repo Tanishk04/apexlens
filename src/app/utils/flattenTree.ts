@@ -8,6 +8,8 @@ export interface FlatTreeNode {
   name: string;
   durationMs: number;
   lineNumber?: number;
+  /** 1-based raw debug log line index (for jump-to-log-line); absent for flattened event lines. */
+  rawLine?: number;
   event?: string;
   /** True when this row is an ExecutionNode that has visible children. */
   expandable: boolean;
@@ -79,6 +81,7 @@ export function flattenExecutionTree(
           name: node.soql || node.name,
           durationMs: durationMs(node),
           lineNumber: node.lineNumber,
+          rawLine: node.rawLine,
           event: node.event,
           expandable: hasVisibleChildren,
           collapsed: isCollapsed,
@@ -104,6 +107,7 @@ export function flattenExecutionTree(
       name: node.text,
       durationMs: 0,
       lineNumber: node.lineNumber,
+      rawLine: node.rawLine,
       event: node.event,
       expandable: false,
       collapsed: false,

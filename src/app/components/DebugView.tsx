@@ -1,7 +1,8 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { Bug, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 import type { LogEventLine } from '../../types';
+import { DebugIcon } from '../icons/DebugIcon';
 
 interface Props {
   lines: LogEventLine[];
@@ -66,7 +67,7 @@ export const DebugView = ({ lines }: Props) => {
   if (debugRows.length === 0) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 bg-background p-8 text-center">
-        <Bug size={28} className="text-muted-foreground/50" />
+        <DebugIcon size={64} className="text-muted-foreground/60" />
         <p className="text-sm text-muted-foreground">No USER_DEBUG statements in this log.</p>
         <p className="max-w-sm text-xs text-muted-foreground/70">
           Add <span className="font-mono text-muted-foreground">System.debug(…)</span> calls, or check that
@@ -110,7 +111,7 @@ export const DebugView = ({ lines }: Props) => {
                   minHeight: vr.size,
                   transform: `translateY(${vr.start}px)`,
                 }}
-                className="flex items-start gap-3 border-b border-border/40 px-4 py-1 hover:bg-accent/60"
+                className="flex items-baseline gap-3 border-b border-border/40 px-4 py-1 hover:bg-accent/60"
               >
                 <span className="w-12 shrink-0 pt-0.5 text-right font-mono text-xs text-muted-foreground/70">
                   {row.lineNumber ? row.lineNumber : ''}
