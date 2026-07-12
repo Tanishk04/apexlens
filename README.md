@@ -1,9 +1,32 @@
 # ApexLens
 
+[![CI](https://github.com/Tanishk04/apexlens/actions/workflows/ci.yml/badge.svg)](https://github.com/Tanishk04/apexlens/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 A privacy-first Chrome extension (Manifest V3) that turns raw Salesforce debug logs into a
 structured, interactive execution model — collapse/expand call tree, flame-chart timeline,
 governor-limit dashboard, and SOQL/DML/Flow analysis. All parsing happens locally; no log data
-ever leaves the browser. Optional AI diagnosis sends only a structured summary, never the raw log.
+ever leaves the browser. Optional AI diagnosis is bring-your-own-key and fully opt-in.
+
+## Features
+
+- **Execution Tree** — collapsible call tree, multi-type filtering, jump straight to the raw log
+  line behind any row.
+- **Execution Timeline** — canvas flame chart with bounded pan/zoom and a minimap.
+- **Governor Dashboard** — SOQL/DML/CPU/heap usage at a glance.
+- **SOQL / DML / Flow Analysis** — sortable, filterable tables.
+- **Log Explorer & Raw Tree** — exact raw log text, color-coded by event type, in-app find.
+- **AI analysis (BYOK)** — optional, opt-in, guardrailed against speculation and code generation.
+
+<p>
+  <img src="branding/ApexLens/ChromeStore/screenshots/screenshot-1.png" width="49%" alt="Execution Tree" />
+  <img src="branding/ApexLens/ChromeStore/screenshots/screenshot-2.png" width="49%" alt="Execution Timeline" />
+</p>
+
+## Install
+
+- **Chrome Web Store**: pending review — link will be added here once published.
+- **From source**: see [Development](#development) below.
 
 ## Stack
 
@@ -63,4 +86,15 @@ new API versions never break parsing.
 ## Privacy
 
 No telemetry, no uploads, no external calls by default. Logs are parsed and held in-memory in the
-extension tab only.
+extension tab only. Full policy, including exactly what the opt-in AI feature sends and to whom:
+[PRIVACY.md](PRIVACY.md).
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup, the verification scripts CI runs, and coding
+conventions. Please read [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) too. Security issues: see
+[SECURITY.md](SECURITY.md) instead of filing a public issue.
+
+## License
+
+[MIT](LICENSE)

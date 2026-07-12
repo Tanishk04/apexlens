@@ -1,8 +1,16 @@
 {
-  "name": "salesforce-debug-assistant",
+  "name": "apexlens",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "AI-assisted Salesforce Apex debug log analyzer — Chrome extension.",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Tanishk04/apexlens.git"
+  },
+  "homepage": "https://github.com/Tanishk04/apexlens#readme",
+  "bugs": {
+    "url": "https://github.com/Tanishk04/apexlens/issues"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -11,9 +19,16 @@
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
     "lint": "eslint src"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "salesforce",
+    "apex",
+    "debug-log",
+    "chrome-extension",
+    "developer-tools",
+    "ai"
+  ],
+  "author": "Tanishk04",
+  "license": "MIT",
   "type": "commonjs",
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.0.0-beta.33",

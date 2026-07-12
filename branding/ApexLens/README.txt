@@ -34,9 +34,11 @@ ChromeStore/    Chrome Web Store listing assets:
     circular app-icon treatments)
   - promo-small.png (440x280), promo-large.png (920x680), promo-marquee.png
     (1400x560) — Chrome Web Store promotional tile sizes
-  - screenshots/  Two PLACEHOLDER screenshot frames (1280x800). These are
-    branded placeholder frames, not real captured UI — swap for actual app
-    screenshots before submitting to the Web Store.
+  - screenshots/  4 real captured screenshots (1280x800): Execution Tree,
+    Execution Timeline, Governor Dashboard, AI tab — captured against the demo
+    log via branding/scripts/capture-screenshots.mjs (see below). The original
+    placeholder frame templates (before real capture) are still under
+    SVG/screenshot-placeholder-{1,2}.svg for reference/regeneration if needed.
 
 BrandGuide/     Usage guidelines: palette, typography, minimum size, clear
                 space, incorrect usage, construction grid.
@@ -54,3 +56,11 @@ REGENERATING THIS PACKAGE
 node branding/scripts/generate-assets.mjs
 (run from the repository root; requires the `sharp` devDependency, already in
 package.json)
+
+RECAPTURING SCREENSHOTS
+-------------------------
+1. npm run dev (start the Vite dev server)
+2. npm install --no-save puppeteer-core (temporary — reuses your system Chrome,
+   not saved as a project dependency)
+3. node branding/scripts/capture-screenshots.mjs <dev-server-port>
+4. npm uninstall puppeteer-core
