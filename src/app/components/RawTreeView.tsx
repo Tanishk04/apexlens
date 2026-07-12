@@ -3,8 +3,10 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { ChevronRight, ChevronsDownUp, ChevronsUpDown } from 'lucide-react';
 import type { LogEventLine } from '../../types';
 import { buildRawRows, visibleRawRows } from '../utils/rawTree';
-import { computeMatches, splitByMatch, type FindState } from '../utils/find';
+import { computeMatches, type FindState } from '../utils/find';
 import { Minimap, type MinimapLine } from './Minimap';
+import { eventColorFor } from '../theme/eventColors';
+import { Highlighted } from './Highlighted';
 
 interface Props {
   lines: LogEventLine[];
@@ -15,36 +17,17 @@ interface Props {
 
 const ROW_H = 24;
 
-// Muted event-name colors by coarse category (raw view stays low-key).
-const EVENT_COLOR: Record<string, string> = {
-  SOQL: 'text-soql',
-  SOSL: 'text-soql',
-  DML: 'text-dml',
-  CALLOUT: 'text-callout',
-  FLOW: 'text-flow',
-  WORKFLOW: 'text-workflow',
-  VALIDATION: 'text-validation',
-  VF: 'text-vf',
-  METHOD: 'text-method',
-  CODE_UNIT: 'text-code-unit',
+// Raw view intentionally stays low-key: SYSTEM/GENERIC are muted here rather
+// than the shared table's louder text-system, everything else uses the
+// shared category color as-is.
+const MUTED_TEXT_CLASS: Record<string, string> = {
   SYSTEM: 'text-muted-foreground',
   GENERIC: 'text-muted-foreground',
 };
 
-const COLOR_VAR: Record<string, string> = {
-  SOQL: '--c-soql',
-  SOSL: '--c-soql',
-  DML: '--c-dml',
-  CALLOUT: '--c-callout',
-  FLOW: '--c-flow',
-  WORKFLOW: '--c-workflow',
-  VALIDATION: '--c-validation',
-  VF: '--c-vf',
-  METHOD: '--c-method',
-  CODE_UNIT: '--c-code-unit',
-  SYSTEM: '--c-system',
-  GENERIC: '--c-system',
-};
+function eventTextClass(category: string): string {
+  return MUTED_TEXT_CLASS[category] ?? eventColorFor(category).textClass;
+}
 
 export const RawTreeView = ({ lines, find, onMatches, theme }: Props) => {
   const parentRef = useRef<HTMLDivElement>(null);
@@ -69,7 +52,7 @@ export const RawTreeView = ({ lines, find, onMatches, theme }: Props) => {
       rows.map((r) => ({
         offset: r.depth,
         length: r.event.length + r.payload.length,
-        colorVar: COLOR_VAR[r.category] ?? '--c-system',
+        colorVar: eventColorFor(r.category).cssVar,
       })),
     [rows],
   );
@@ -84,6 +67,9 @@ export const RawTreeView = ({ lines, find, onMatches, theme }: Props) => {
   const activeRow = matches.length > 0 ? matches[find.index % matches.length]! : -1;
   useEffect(() => {
     if (activeRow >= 0) rowVirtualizer.scrollToIndex(activeRow, { align: 'center' });
+    // rowVirtualizer is a new object every render (react-virtual's documented
+    // behavior) — including it here would re-scroll on every render instead of
+    // only when the active match actually changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeRow]);
 
@@ -98,25 +84,9 @@ export const RawTreeView = ({ lines, find, onMatches, theme }: Props) => {
   const collapseAll = () =>
     setCollapsed(new Set(allRows.filter((r) => r.expandable).map((r) => r.id)));
 
-  const highlight = (text: string, cls: string, active: boolean) => {
-    if (!find.query) return <span className={cls}>{text}</span>;
-    return splitByMatch(text, find.query, find.caseSensitive).map((seg, i) =>
-      seg.match ? (
-        <mark
-          key={i}
-          className={`rounded-sm px-0 ${
-            active ? 'bg-warn text-background' : 'bg-warn/40 text-foreground'
-          }`}
-        >
-          {seg.text}
-        </mark>
-      ) : (
-        <span key={i} className={cls}>
-          {seg.text}
-        </span>
-      ),
-    );
-  };
+  const highlight = (text: string, cls: string, active: boolean) => (
+    <Highlighted text={text} query={find.query} caseSensitive={find.caseSensitive} active={active} className={cls} />
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
@@ -147,7 +117,7 @@ export const RawTreeView = ({ lines, find, onMatches, theme }: Props) => {
           <div style={{ height: rowVirtualizer.getTotalSize(), position: 'relative' }}>
             {rowVirtualizer.getVirtualItems().map((vr) => {
               const row = rows[vr.index]!;
-              const color = EVENT_COLOR[row.category] ?? EVENT_COLOR.GENERIC!;
+              const color = eventTextClass(row.category);
               const isActive = vr.index === activeRow;
               return (
                 <div

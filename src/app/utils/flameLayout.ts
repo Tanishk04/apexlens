@@ -1,4 +1,5 @@
 import type { ExecutionNode, StatementEvent } from '../../types';
+import { eventColorFor } from '../theme/eventColors';
 
 /** A single rectangle in the flame chart (one execution node). */
 export interface FlameRect {
@@ -92,24 +93,26 @@ export function buildFlameLayout(root: ExecutionNode | null): FlameLayout {
   return { rects, markers, t0, t1, maxDepth };
 }
 
-/** CSS variable per node type — resolved at draw time so themes apply. */
-const FLAME_VARS: Record<string, string> = {
-  CODE_UNIT: '--c-code-unit',
-  METHOD: '--c-method',
-  TRIGGER: '--c-trigger',
-  FLOW: '--c-flow',
-  WORKFLOW: '--c-workflow',
-  SOQL: '--c-soql',
-  SOSL: '--c-soql',
-  DML: '--c-dml',
-  CALLOUT: '--c-callout',
-  VALIDATION: '--c-validation',
-  VF: '--c-vf',
-  SYSTEM: '--c-system',
-  GENERIC: '--c-system',
-};
+/**
+ * Clamp a viewport's left edge so it can't pan past the log's actual extent.
+ * If the viewport is as wide as (or wider than) the full log span, pin to
+ * `t0` — matches the left-aligned convention used when fitting/resetting.
+ */
+export function clampStartNs(
+  startNs: number,
+  nsPerPx: number,
+  t0: number,
+  t1: number,
+  widthPx: number,
+): number {
+  const span = Math.max(1, t1 - t0);
+  const viewSpan = nsPerPx * Math.max(0, widthPx);
+  if (viewSpan >= span) return t0;
+  const maxStart = t1 - viewSpan;
+  return Math.min(Math.max(startNs, t0), maxStart);
+}
 
 export function flameColor(type: string): string {
-  const varName = FLAME_VARS[type] ?? FLAME_VARS.GENERIC!;
+  const varName = eventColorFor(type).cssVar;
   return getComputedStyle(document.documentElement).getPropertyValue(varName).trim() || '#888';
 }

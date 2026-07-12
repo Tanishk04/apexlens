@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { computeMatches, splitByMatch, type FindState } from '../utils/find';
+import { computeMatches, type FindState } from '../utils/find';
+import { Highlighted } from './Highlighted';
 import {
   ChevronRight,
   Database,
@@ -19,6 +20,7 @@ import {
   FileText,
 } from 'lucide-react';
 import type { FlatTreeNode } from '../utils/flattenTree';
+import { eventColorFor } from '../theme/eventColors';
 
 interface VirtualTreeProps {
   nodes: FlatTreeNode[];
@@ -34,30 +36,37 @@ interface VirtualTreeProps {
   onJumpToLine: (line: number) => void;
 }
 
-const TYPE_STYLE: Record<string, { color: string; badge: string; Icon: typeof Database }> = {
-  CODE_UNIT: { color: 'text-code-unit', badge: 'bg-code-unit/15 text-code-unit', Icon: Layers },
-  METHOD: { color: 'text-method', badge: 'bg-method/15 text-method', Icon: Code2 },
-  TRIGGER: { color: 'text-trigger', badge: 'bg-trigger/15 text-trigger', Icon: Cog },
-  FLOW: { color: 'text-flow', badge: 'bg-flow/15 text-flow', Icon: GitBranch },
-  WORKFLOW: { color: 'text-workflow', badge: 'bg-workflow/15 text-workflow', Icon: Workflow },
-  SOQL: { color: 'text-soql', badge: 'bg-soql/15 text-soql', Icon: Database },
-  SOSL: { color: 'text-soql', badge: 'bg-soql/15 text-soql', Icon: Search },
-  DML: { color: 'text-dml', badge: 'bg-dml/15 text-dml', Icon: Save },
-  CALLOUT: { color: 'text-callout', badge: 'bg-callout/15 text-callout', Icon: Globe },
-  VALIDATION: {
-    color: 'text-validation',
-    badge: 'bg-warn/10 text-validation',
-    Icon: ShieldCheck,
-  },
-  VF: { color: 'text-vf', badge: 'bg-vf/15 text-vf', Icon: Layers },
-  SYSTEM: { color: 'text-muted-foreground', badge: 'bg-muted text-foreground', Icon: Cog },
-  DEBUG: { color: 'text-debug', badge: 'bg-debug/15 text-debug', Icon: Logs },
-  EXCEPTION: { color: 'text-error', badge: 'bg-error/10 text-error', Icon: AlertTriangle },
-  GENERIC: { color: 'text-muted-foreground', badge: 'bg-muted text-muted-foreground', Icon: Circle },
+const TYPE_ICON: Record<string, typeof Database> = {
+  CODE_UNIT: Layers,
+  METHOD: Code2,
+  TRIGGER: Cog,
+  FLOW: GitBranch,
+  WORKFLOW: Workflow,
+  SOQL: Database,
+  SOSL: Search,
+  DML: Save,
+  CALLOUT: Globe,
+  VALIDATION: ShieldCheck,
+  VF: Layers,
+  SYSTEM: Cog,
+  DEBUG: Logs,
+  EXCEPTION: AlertTriangle,
+  GENERIC: Circle,
+};
+
+// Tree rows stay low-key for SYSTEM/GENERIC (matches Raw Tree's muted choice).
+const MUTED_TEXT_CLASS: Record<string, string> = {
+  SYSTEM: 'text-muted-foreground',
+  GENERIC: 'text-muted-foreground',
 };
 
 function styleFor(type: string) {
-  return TYPE_STYLE[type] ?? TYPE_STYLE.GENERIC!;
+  const entry = eventColorFor(type);
+  return {
+    color: MUTED_TEXT_CLASS[type] ?? entry.textClass,
+    badge: entry.badgeClass,
+    Icon: TYPE_ICON[type] ?? TYPE_ICON.GENERIC!,
+  };
 }
 
 export const VirtualTree = ({
@@ -83,6 +92,9 @@ export const VirtualTree = ({
     if (!scrollToId) return;
     const index = nodes.findIndex((n) => n.id === scrollToId);
     if (index >= 0) rowVirtualizer.scrollToIndex(index, { align: 'center' });
+    // rowVirtualizer is a new object every render (react-virtual's documented
+    // behavior) — including it here would re-scroll on every render instead of
+    // only when scrollToId/nodes actually change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scrollToId, nodes]);
 
@@ -100,7 +112,7 @@ export const VirtualTree = ({
     find && matches.length > 0 ? matches[find.index % matches.length]! : -1;
   useEffect(() => {
     if (activeRow >= 0) rowVirtualizer.scrollToIndex(activeRow, { align: 'center' });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- see note above
   }, [activeRow]);
 
   return (
@@ -190,24 +202,16 @@ export const VirtualTree = ({
                     : 'text-foreground'
                 }`}
               >
-                {find?.query
-                  ? splitByMatch(node.name, find.query, find.caseSensitive).map((seg, i) =>
-                      seg.match ? (
-                        <mark
-                          key={i}
-                          className={`rounded-sm px-0 ${
-                            virtualRow.index === activeRow
-                              ? 'bg-warn text-background'
-                              : 'bg-warn/40 text-foreground'
-                          }`}
-                        >
-                          {seg.text}
-                        </mark>
-                      ) : (
-                        <span key={i}>{seg.text}</span>
-                      ),
-                    )
-                  : node.name}
+                {find?.query ? (
+                  <Highlighted
+                    text={node.name}
+                    query={find.query}
+                    caseSensitive={find.caseSensitive}
+                    active={virtualRow.index === activeRow}
+                  />
+                ) : (
+                  node.name
+                )}
               </span>
 
               {node.lineNumber ? (

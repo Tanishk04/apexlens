@@ -1,5 +1,7 @@
 /** Provider metadata + model picklists (curated static + live OpenRouter). */
 
+import { STORAGE_KEYS } from '../app/utils/storageKeys';
+
 export interface ProviderMeta {
   id: string;
   label: string;
@@ -11,6 +13,8 @@ export interface ProviderMeta {
   needsKey: boolean;
   /** Curated model ids (OpenRouter uses the live list instead). */
   models: string[];
+  /** Selectable today? false = shown in the dropdown but disabled ("coming soon"). */
+  available: boolean;
 }
 
 export const PROVIDER_META: ProviderMeta[] = [
@@ -21,6 +25,7 @@ export const PROVIDER_META: ProviderMeta[] = [
     keyUrl: 'https://openrouter.ai/keys',
     needsKey: true,
     models: [], // populated live from the OpenRouter API
+    available: true,
   },
   {
     id: 'anthropic',
@@ -29,6 +34,7 @@ export const PROVIDER_META: ProviderMeta[] = [
     keyUrl: 'https://console.anthropic.com/settings/keys',
     needsKey: true,
     models: ['claude-opus-4-8', 'claude-sonnet-5', 'claude-haiku-4-5-20251001'],
+    available: false,
   },
   {
     id: 'openai',
@@ -37,6 +43,7 @@ export const PROVIDER_META: ProviderMeta[] = [
     keyUrl: 'https://platform.openai.com/api-keys',
     needsKey: true,
     models: ['gpt-4o', 'gpt-4o-mini', 'o4-mini'],
+    available: false,
   },
   {
     id: 'ollama',
@@ -44,6 +51,7 @@ export const PROVIDER_META: ProviderMeta[] = [
     baseUrl: 'http://localhost:11434/v1',
     needsKey: false,
     models: ['llama3.1', 'qwen2.5-coder', 'mistral'],
+    available: false,
   },
   {
     id: 'custom',
@@ -51,6 +59,7 @@ export const PROVIDER_META: ProviderMeta[] = [
     baseUrl: '', // user supplied
     needsKey: false,
     models: [],
+    available: true,
   },
 ];
 
@@ -70,7 +79,7 @@ const OPENROUTER_FALLBACK: ModelOption[] = [
   { id: 'openai/gpt-4o-mini', label: 'GPT-4o mini', free: false },
 ];
 
-const CACHE_KEY = 'sfda_openrouter_models_v2'; // v2: text-chat filter applied
+const CACHE_KEY = STORAGE_KEYS.openRouterModelsCache;
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 export interface OpenRouterModel {

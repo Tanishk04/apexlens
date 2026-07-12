@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!--
+    ApexLens mark: an open "peak" (apex) stroke with a breakpoint-dot accent
+    at the summit. Two line segments + one circle — reads as a shape at any
+    size, no fine detail to lose at 16px. Blue family only, no gradients.
+  -->
+  <g id="apexlens-mark" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path id="peak" d="M 92 418 L 256 130 L 420 418" stroke="#2563EB" stroke-width="66" />
+    <circle id="breakpoint-dot" cx="256" cy="130" r="42" fill="#3B82F6" stroke="none" />
+  </g>
+</svg>

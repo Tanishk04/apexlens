@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 800">
+  <!-- Store screenshot placeholder — explicit placeholder frame, not a real UI capture.
+       Swap for an actual app screenshot before submitting to the Chrome Web Store. -->
+  <rect width="1280" height="800" fill="#0B1220" />
+  <rect x="60" y="60" width="1160" height="680" rx="14" fill="#111C33" stroke="#1E2A47" stroke-width="2" />
+  <circle cx="96" cy="94" r="7" fill="#334155" />
+  <circle cx="120" cy="94" r="7" fill="#334155" />
+  <circle cx="144" cy="94" r="7" fill="#334155" />
+  <g transform="translate(540,300) scale(0.351563)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 92 418 L 256 130 L 420 418" stroke="#FFFFFF" stroke-width="66" />
+    <circle cx="256" cy="130" r="42" fill="#3B82F6" stroke="none" />
+  </g>
+  <text x="640" y="560" font-family="Inter, sans-serif" font-weight="700" font-size="30" fill="#FFFFFF" text-anchor="middle">Screenshot placeholder</text>
+  <text x="640" y="598" font-family="Inter, sans-serif" font-weight="500" font-size="20" fill="#94A3B8" text-anchor="middle">Replace with a real captured app view before publishing</text>
+</svg>

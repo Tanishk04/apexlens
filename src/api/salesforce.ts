@@ -37,38 +37,27 @@ export async function getSessionId(domain: string): Promise<string | null> {
   });
 }
 
-/**
- * Basic interface for ApexLog record.
- */
-export interface ApexLogRecord {
-  Id: string;
-  Status: string;
-  StartTime: string;
-  LogLength: number;
-  Operation: string;
-  LogUser?: { Name: string };
-}
+// Suffixes matching this extension's own host_permissions (manifest.json) — the
+// only domains the extension is actually granted cookie/fetch access to. Used to
+// validate `domain` before it's used to read cookies or fetch a log body, since
+// that value can arrive via a URL query param (see App.tsx) and must not be
+// trusted blindly.
+const ALLOWED_HOST_SUFFIXES = ['.salesforce.com', '.force.com', '.salesforce-setup.com'];
 
-/**
- * Fetches recent debug logs from the active org.
- */
-export async function fetchRecentLogs(domain: string, sessionId: string): Promise<ApexLogRecord[]> {
-  const query = 'SELECT Id, Status, StartTime, LogLength, LogUser.Name, Operation FROM ApexLog ORDER BY StartTime DESC LIMIT 20';
-  const url = `${domain}/services/data/v61.0/tooling/query/?q=${encodeURIComponent(query)}`;
-
-  const response = await fetch(url, {
-    headers: {
-      'Authorization': `Bearer ${sessionId}`,
-      'Content-Type': 'application/json'
-    }
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to fetch logs: ${response.statusText}`);
+/** Is `domain` (an origin string, e.g. `https://foo.my.salesforce.com`) one this
+ * extension actually has host permission for? Fails closed on anything else,
+ * including malformed URLs and non-https schemes. */
+export function isAllowedSalesforceDomain(domain: string): boolean {
+  try {
+    const url = new URL(domain);
+    if (url.protocol !== 'https:') return false;
+    const hostname = url.hostname;
+    return ALLOWED_HOST_SUFFIXES.some(
+      (suffix) => hostname === suffix.slice(1) || hostname.endsWith(suffix),
+    );
+  } catch {
+    return false;
   }
-
-  const data = await response.json();
-  return data.records as ApexLogRecord[];
 }
 
 /**

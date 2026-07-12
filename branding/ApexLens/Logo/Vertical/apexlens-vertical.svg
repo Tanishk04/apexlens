@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 480">
+  <!-- Vertical lockup: mark above wordmark, for light backgrounds. -->
+  <g id="mark" transform="translate(110,20) scale(0.390625)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 92 418 L 256 130 L 420 418" stroke="#2563EB" stroke-width="66" />
+    <circle cx="256" cy="130" r="42" fill="#3B82F6" stroke="none" />
+  </g>
+  <text x="210" y="360" font-family="Inter, sans-serif" font-weight="800" font-size="64" fill="#0F172A" letter-spacing="-1" text-anchor="middle">ApexLens</text>
+</svg>

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 240">
+  <!-- Horizontal lockup for light/white backgrounds. Text uses font-family="Inter";
+       the generation script embeds the real Inter font at rasterization time so
+       PNG exports render correctly. This master file stays lightweight/editable
+       and relies on the system Inter font when opened in Figma/Illustrator/Inkscape. -->
+  <g id="mark" transform="translate(20,20) scale(0.390625)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 92 418 L 256 130 L 420 418" stroke="#2563EB" stroke-width="66" />
+    <circle cx="256" cy="130" r="42" fill="#3B82F6" stroke="none" />
+  </g>
+  <text x="260" y="168" font-family="Inter, sans-serif" font-weight="800" font-size="130" fill="#0F172A" letter-spacing="-2">ApexLens</text>
+</svg>

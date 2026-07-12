@@ -1,7 +1,22 @@
 import React from 'react';
-import { Activity, FolderOpen, Sun, Moon } from 'lucide-react';
+import { FolderOpen, Sun, Moon } from 'lucide-react';
 import type { LogMetrics } from '../../types';
 import { shortcutLabel } from '../utils/platform';
+
+/** ApexLens mark: magnifying-glass lens + handle + "A". See branding/ApexLens/SVG/mark-simple.svg. */
+const ApexLensMark = () => (
+  <svg viewBox="0 0 512 512" width="16" height="16" aria-hidden="true">
+    <circle cx="210" cy="210" r="113" fill="#FFFFFF" />
+    <path d="M 80 210 A 130 130 0 0 1 340 210" stroke="#60A5FA" strokeWidth="34" fill="none" />
+    <path d="M 340 210 A 130 130 0 0 1 80 210" stroke="#1D4ED8" strokeWidth="34" fill="none" />
+    <path d="M 312 312 L 432 432" stroke="#3B82F6" strokeWidth="46" strokeLinecap="round" fill="none" />
+    <g strokeLinecap="round" strokeLinejoin="round" fill="none">
+      <path d="M 150 290 L 210 140" stroke="#0F172A" strokeWidth="22" />
+      <path d="M 210 140 L 270 290" stroke="#3B82F6" strokeWidth="22" />
+      <path d="M 178 240 L 242 240" stroke="#2563EB" strokeWidth="20" />
+    </g>
+  </svg>
+);
 
 export interface LogMeta {
   name: string;
@@ -38,12 +53,10 @@ export const AppHeader = ({
       {/* logo bar */}
       <div className="flex h-11 items-center justify-between gap-4 border-b border-border px-4">
         <div className="flex items-center gap-2">
-          <span className="rounded-md bg-primary p-1 text-primary-foreground">
-            <Activity size={14} />
+          <span className="flex rounded-md bg-[#0F172A] p-1.5">
+            <ApexLensMark />
           </span>
-          <span className="text-sm font-semibold tracking-tight text-foreground">
-            Debug Log Assistant
-          </span>
+          <span className="text-sm font-semibold tracking-tight text-foreground">ApexLens</span>
         </div>
 
         <div className="flex items-center gap-2">

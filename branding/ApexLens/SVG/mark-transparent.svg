@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Colored mark, transparent background — same content as mark.svg, kept as
+       its own named file to match the "Transparent" variant in the brand deliverable list. -->
+  <g id="apexlens-mark" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 92 418 L 256 130 L 420 418" stroke="#2563EB" stroke-width="66" />
+    <circle cx="256" cy="130" r="42" fill="#3B82F6" stroke="none" />
+  </g>
+</svg>

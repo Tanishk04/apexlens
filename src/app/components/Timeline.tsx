@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ExecutionNode } from '../../types';
-import { buildFlameLayout, flameColor, type FlameRect } from '../utils/flameLayout';
+import { buildFlameLayout, clampStartNs, flameColor, type FlameRect } from '../utils/flameLayout';
 
 interface TimelineProps {
   root: ExecutionNode | null;
@@ -12,6 +12,10 @@ interface TimelineProps {
 
 const ROW_H = 18;
 const RULER_H = 24;
+const MINIMAP_H = 28;
+// Approx rendered hover-tooltip size, used to keep it inside the container.
+const TIP_W = 260;
+const TIP_H = 76;
 
 /** Resolve a CSS custom property against the active theme. */
 function token(name: string, fallback: string): string {
@@ -44,6 +48,7 @@ function fmtNs(ns: number): string {
 export const Timeline = ({ root, selectedId, onSelect, theme }: TimelineProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const minimapCanvasRef = useRef<HTMLCanvasElement>(null);
   const [tip, setTip] = useState<Tip | null>(null);
 
   const layout = useMemo(() => buildFlameLayout(root), [root]);
@@ -126,7 +131,7 @@ export const Timeline = ({ root, selectedId, onSelect, theme }: TimelineProps) =
       ctx.globalAlpha = 1;
 
       if (r.unclosed) {
-        ctx.strokeStyle = '#ef4444';
+        ctx.strokeStyle = token('--c-error', '#ef4444');
         ctx.strokeRect(x + 0.5, y + 0.5, wRect - 1, ROW_H - 2);
       }
       if (isSel) {
@@ -151,13 +156,13 @@ export const Timeline = ({ root, selectedId, onSelect, theme }: TimelineProps) =
     for (const m of layout.markers) {
       const x = (m.timestamp - startNs) / nsPerPx;
       if (x < 0 || x > w) continue;
-      ctx.strokeStyle = '#ef4444';
+      ctx.strokeStyle = token('--c-error', '#ef4444');
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.moveTo(x, RULER_H);
       ctx.lineTo(x, h);
       ctx.stroke();
-      ctx.fillStyle = '#ef4444';
+      ctx.fillStyle = token('--c-error', '#ef4444');
       ctx.beginPath();
       ctx.moveTo(x - 4, RULER_H);
       ctx.lineTo(x + 4, RULER_H);
@@ -167,13 +172,79 @@ export const Timeline = ({ root, selectedId, onSelect, theme }: TimelineProps) =
     }
   }, [layout, selectedId]);
 
+  const drawMinimap = useCallback(() => {
+    const canvas = minimapCanvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+    const w = size.current.w;
+    const h = MINIMAP_H;
+    const dpr = window.devicePixelRatio || 1;
+
+    if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = token('--card', '#18181b');
+    ctx.fillRect(0, 0, w, h);
+
+    const span = Math.max(1, layout.t1 - layout.t0);
+    const lanes = Math.max(1, layout.maxDepth + 1);
+    const trackTop = 2;
+    const trackH = h - 4;
+
+    ctx.globalAlpha = 0.85;
+    for (const r of layout.rects) {
+      const x = ((r.start - layout.t0) / span) * w;
+      const rw = Math.max(0.5, ((r.end - r.start) / span) * w);
+      const y = trackTop + (r.depth / lanes) * trackH;
+      const rh = Math.max(1, trackH / lanes);
+      ctx.fillStyle = flameColor(r.type);
+      ctx.fillRect(x, y, rw, rh);
+    }
+    ctx.globalAlpha = 1;
+
+    for (const m of layout.markers) {
+      const x = ((m.timestamp - layout.t0) / span) * w;
+      ctx.fillStyle = token('--c-error', '#ef4444');
+      ctx.fillRect(x, 0, 1, h);
+    }
+
+    // Current viewport ("the frame"), overlaid on the full-range strip.
+    // Foreground border (not --ring, too low-contrast against the card bg) so
+    // it stays clearly visible in both themes.
+    const { startNs, nsPerPx } = view.current;
+    const mainW = size.current.w || 1;
+    const vx = ((startNs - layout.t0) / span) * w;
+    const vw = Math.max(2, ((nsPerPx * mainW) / span) * w);
+    ctx.fillStyle = token('--foreground', '#fff');
+    ctx.globalAlpha = 0.12;
+    ctx.fillRect(vx, 0, vw, h);
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = token('--foreground', '#fff');
+    ctx.lineWidth = 2;
+    // Snap each stroke edge independently to the device-pixel grid — with a
+    // fractional dpr (e.g. 1.25x displays), unsnapped fractional coordinates
+    // make the canvas anti-alias the left/right/top/bottom strokes to
+    // different apparent widths.
+    const snap = (v: number) => Math.round(v * dpr) / dpr;
+    const left = snap(vx + 1);
+    const right = snap(vx + vw - 1);
+    const top = snap(1);
+    const bottom = snap(h - 1);
+    ctx.strokeRect(left, top, Math.max(0, right - left), Math.max(0, bottom - top));
+    ctx.lineWidth = 1;
+  }, [layout]);
+
   const scheduleDraw = useCallback(() => {
     if (rafRef.current) return;
     rafRef.current = requestAnimationFrame(() => {
       rafRef.current = 0;
       draw();
+      drawMinimap();
     });
-  }, [draw]);
+  }, [draw, drawMinimap]);
 
   // Resize handling + initial fit.
   useEffect(() => {
@@ -185,7 +256,10 @@ export const Timeline = ({ root, selectedId, onSelect, theme }: TimelineProps) =
     });
     ro.observe(el);
     size.current = { w: el.clientWidth, h: el.clientHeight };
-    return () => ro.disconnect();
+    return () => {
+      ro.disconnect();
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
   }, [scheduleDraw]);
 
   // Refit + redraw whenever the log (layout) changes.
@@ -229,6 +303,7 @@ export const Timeline = ({ root, selectedId, onSelect, theme }: TimelineProps) =
       const minNsPerPx = maxNsPerPx / 100000;
       v.nsPerPx = Math.min(maxNsPerPx, Math.max(minNsPerPx, v.nsPerPx * factor));
       v.startNs = timeAtCursor - mx * v.nsPerPx;
+      v.startNs = clampStartNs(v.startNs, v.nsPerPx, layout.t0, layout.t1, size.current.w);
       scheduleDraw();
     },
     [layout, scheduleDraw],
@@ -253,6 +328,13 @@ export const Timeline = ({ root, selectedId, onSelect, theme }: TimelineProps) =
     if (drag.current) {
       const dx = e.clientX - drag.current.x;
       view.current.startNs = drag.current.startNs - dx * view.current.nsPerPx;
+      view.current.startNs = clampStartNs(
+        view.current.startNs,
+        view.current.nsPerPx,
+        layout.t0,
+        layout.t1,
+        size.current.w,
+      );
       setTip(null);
       scheduleDraw();
       return;
@@ -265,7 +347,16 @@ export const Timeline = ({ root, selectedId, onSelect, theme }: TimelineProps) =
       scheduleDraw();
     }
     if (hit) {
-      setTip({ left: mx + 12, top: my + 12, rect: hit });
+      // Keep the tooltip inside the container: flip to the other side of the
+      // cursor when it would otherwise overflow the (overflow-hidden) edge.
+      const { w, h } = size.current;
+      let left = mx + 12;
+      let top = my + 12;
+      if (left + TIP_W > w) left = mx - TIP_W - 12;
+      if (top + TIP_H > h) top = my - TIP_H - 12;
+      left = Math.max(4, left);
+      top = Math.max(4, top);
+      setTip({ left, top, rect: hit });
     } else if (tip) {
       setTip(null);
     }
@@ -288,6 +379,84 @@ export const Timeline = ({ root, selectedId, onSelect, theme }: TimelineProps) =
     scheduleDraw();
   };
 
+  // Minimap: click/drag jumps the main viewport to that time (keeps current zoom).
+  const minimapDrag = useRef(false);
+
+  /** Time (ns) at a given client X on the minimap strip. */
+  const minimapTimeAt = useCallback(
+    (clientX: number): number => {
+      const canvas = minimapCanvasRef.current;
+      if (!canvas) return layout.t0;
+      const rect = canvas.getBoundingClientRect();
+      const span = Math.max(1, layout.t1 - layout.t0);
+      const frac = Math.min(1, Math.max(0, (clientX - rect.left) / (rect.width || 1)));
+      return layout.t0 + frac * span;
+    },
+    [layout],
+  );
+
+  const minimapSeek = useCallback(
+    (clientX: number) => {
+      const targetNs = minimapTimeAt(clientX);
+      const viewSpan = view.current.nsPerPx * (size.current.w || 1);
+      view.current.startNs = clampStartNs(
+        targetNs - viewSpan / 2,
+        view.current.nsPerPx,
+        layout.t0,
+        layout.t1,
+        size.current.w,
+      );
+      scheduleDraw();
+    },
+    [layout, minimapTimeAt, scheduleDraw],
+  );
+
+  /** 'move' = grabbed inside the current frame (drag it, preserving grab offset); 'seek' = clicked elsewhere (jump/re-center, existing scroll behavior). */
+  const minimapDragMode = useRef<'move' | 'seek'>('seek');
+  const minimapGrabOffsetNs = useRef(0);
+
+  const onMinimapPointerDown = (e: React.PointerEvent) => {
+    try {
+      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {
+      // Pointer capture can fail (e.g. synthetic events); dragging still works.
+    }
+    minimapDrag.current = true;
+    const clickedNs = minimapTimeAt(e.clientX);
+    const { startNs, nsPerPx } = view.current;
+    const viewSpan = nsPerPx * (size.current.w || 1);
+    if (clickedNs >= startNs && clickedNs <= startNs + viewSpan) {
+      // Grabbed the frame itself — drag it, keeping the click point fixed
+      // relative to the frame (feels like dragging the frame, not jumping).
+      minimapDragMode.current = 'move';
+      minimapGrabOffsetNs.current = clickedNs - startNs;
+    } else {
+      minimapDragMode.current = 'seek';
+      minimapSeek(e.clientX);
+    }
+  };
+
+  const onMinimapPointerMove = (e: React.PointerEvent) => {
+    if (!minimapDrag.current) return;
+    if (minimapDragMode.current === 'move') {
+      const targetNs = minimapTimeAt(e.clientX);
+      view.current.startNs = clampStartNs(
+        targetNs - minimapGrabOffsetNs.current,
+        view.current.nsPerPx,
+        layout.t0,
+        layout.t1,
+        size.current.w,
+      );
+      scheduleDraw();
+    } else {
+      minimapSeek(e.clientX);
+    }
+  };
+
+  const onMinimapPointerUp = () => {
+    minimapDrag.current = false;
+  };
+
   const empty = layout.rects.length === 0;
 
   return (
@@ -305,6 +474,17 @@ export const Timeline = ({ root, selectedId, onSelect, theme }: TimelineProps) =
           Reset zoom
         </button>
       </div>
+      {!empty ? (
+        <canvas
+          ref={minimapCanvasRef}
+          className="block w-full shrink-0 cursor-pointer"
+          style={{ height: MINIMAP_H, touchAction: 'none' }}
+          onPointerDown={onMinimapPointerDown}
+          onPointerMove={onMinimapPointerMove}
+          onPointerUp={onMinimapPointerUp}
+          onPointerLeave={onMinimapPointerUp}
+        />
+      ) : null}
       <div ref={containerRef} className="relative min-h-0 flex-1 overflow-hidden">
         {empty ? (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground/70">

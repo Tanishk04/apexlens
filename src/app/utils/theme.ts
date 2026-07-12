@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
+import { STORAGE_KEYS } from './storageKeys';
 
 export type Theme = 'light' | 'dark';
 
 function initialTheme(): Theme {
-  const stored = localStorage.getItem('sfda_theme');
+  const stored = localStorage.getItem(STORAGE_KEYS.theme);
   if (stored === 'light' || stored === 'dark') return stored;
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
@@ -14,7 +15,7 @@ export function useTheme(): [Theme, () => void] {
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
-    localStorage.setItem('sfda_theme', theme);
+    localStorage.setItem(STORAGE_KEYS.theme, theme);
   }, [theme]);
 
   const toggle = () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'));

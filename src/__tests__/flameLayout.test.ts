@@ -1,5 +1,5 @@
 import { SalesforceLogParser } from '../parser';
-import { buildFlameLayout } from '../app/utils/flameLayout';
+import { buildFlameLayout, clampStartNs } from '../app/utils/flameLayout';
 
 const HEADER = '61.0 APEX_CODE,DEBUG\n';
 
@@ -53,5 +53,27 @@ describe('buildFlameLayout', () => {
     expect(markers).toEqual([]);
     expect(t0).toBe(0);
     expect(t1).toBe(0);
+  });
+});
+
+describe('clampStartNs', () => {
+  const t0 = 1_000;
+  const t1 = 11_000; // span = 10_000
+  const nsPerPx = 100; // viewport span at width 20 = 2_000
+
+  it('clamps a pan past the start to t0', () => {
+    expect(clampStartNs(-5_000, nsPerPx, t0, t1, 20)).toBe(t0);
+  });
+
+  it('clamps a pan past the end to t1 - viewportSpan', () => {
+    expect(clampStartNs(50_000, nsPerPx, t0, t1, 20)).toBe(t1 - nsPerPx * 20);
+  });
+
+  it('leaves an in-range start untouched', () => {
+    expect(clampStartNs(3_000, nsPerPx, t0, t1, 20)).toBe(3_000);
+  });
+
+  it('pins to t0 when the viewport covers the whole span or more', () => {
+    expect(clampStartNs(5_000, 50, t0, t1, 400)).toBe(t0); // viewSpan 20_000 >= span 10_000
   });
 });

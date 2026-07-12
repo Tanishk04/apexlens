@@ -1,30 +1,29 @@
 {
   "manifest_version": 3,
-  "name": "Salesforce Debug Log Assistant",
+  "name": "ApexLens",
   "version": "1.0.0",
-  "description": "Next-Generation Salesforce Debug Log Assistant",
-  "action": {},
+  "description": "ApexLens — AI-assisted Salesforce Apex debug log analysis.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
   "permissions": [
-    "cookies",
-    "storage",
-    "tabs"
+    "cookies"
   ],
   "host_permissions": [
     "https://*.salesforce.com/*",
     "https://*.force.com/*",
     "https://*.salesforce-setup.com/*",
-    "https://*.my.salesforce.com/*",
-    "https://*.sandbox.my.salesforce.com/*",
-    "https://*.develop.my.salesforce.com/*",
-    "https://*.scratch.my.salesforce.com/*",
-    "https://*.my.salesforce-setup.com/*",
-    "https://*.sandbox.my.salesforce-setup.com/*",
-    "https://*.develop.my.salesforce-setup.com/*",
-    "https://*.scratch.my.salesforce-setup.com/*",
-    "https://*.lightning.force.com/*",
-    "https://*.visual.force.com/*",
-    "https://api.anthropic.com/*",
-    "https://api.openai.com/*",
     "https://openrouter.ai/*",
     "http://localhost/*"
   ],
@@ -42,12 +41,6 @@
       "js": ["src/content/debugLogs.ts"],
       "all_frames": true,
       "run_at": "document_idle"
-    }
-  ],
-  "web_accessible_resources": [
-    {
-      "resources": ["src/app/index.html"],
-      "matches": ["*://*/*"]
     }
   ]
 }

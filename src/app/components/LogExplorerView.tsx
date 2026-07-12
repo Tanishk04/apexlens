@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { tokenizeLine, eventClass } from '../utils/logTokens';
-import { computeMatches, splitByMatch, type FindState } from '../utils/find';
+import { tokenizeLine, eventCssVar } from '../utils/logTokens';
+import { computeMatches, type FindState } from '../utils/find';
 import { Minimap, type MinimapLine } from './Minimap';
+import { Highlighted } from './Highlighted';
 
 interface Props {
   rawLog: string | null;
@@ -16,21 +17,6 @@ interface Props {
 const ROW_H = 20;
 
 const EVENT_RE = /^\d{2}:\d{2}:\d{2}\.\d+ \(\d+\)\|([A-Z0-9_]+)/;
-
-const CLS_TO_VAR: Record<string, string> = {
-  'text-soql': '--c-soql',
-  'text-dml': '--c-dml',
-  'text-callout': '--c-callout',
-  'text-flow': '--c-flow',
-  'text-workflow': '--c-workflow',
-  'text-validation': '--c-validation',
-  'text-vf': '--c-vf',
-  'text-method': '--c-method',
-  'text-code-unit': '--c-code-unit',
-  'text-error': '--c-error',
-  'text-debug': '--c-debug',
-  'text-system': '--c-system',
-};
 
 /** Exact raw log text — verbatim lines, line numbers, color-coded, minimap. */
 export const LogExplorerView = ({ rawLog, find, onMatches, theme, scrollToLine }: Props) => {
@@ -51,11 +37,10 @@ export const LogExplorerView = ({ rawLog, find, onMatches, theme, scrollToLine }
     () =>
       lines.map((line) => {
         const m = line.match(EVENT_RE);
-        const cls = m ? eventClass(m[1]!) : 'text-system';
         return {
           offset: m ? 0 : 4,
           length: line.length,
-          colorVar: CLS_TO_VAR[cls] ?? '--c-system',
+          colorVar: m ? eventCssVar(m[1]!) : '--c-system',
         };
       }),
     [lines],
@@ -72,6 +57,9 @@ export const LogExplorerView = ({ rawLog, find, onMatches, theme, scrollToLine }
   const activeLine = matches.length > 0 ? matches[find.index % matches.length]! : -1;
   useEffect(() => {
     if (activeLine >= 0) rowVirtualizer.scrollToIndex(activeLine, { align: 'center' });
+    // rowVirtualizer is a new object every render (react-virtual's documented
+    // behavior) — including it here would re-scroll on every render instead of
+    // only when the active match actually changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeLine]);
 
@@ -80,7 +68,7 @@ export const LogExplorerView = ({ rawLog, find, onMatches, theme, scrollToLine }
     if (!scrollToLine) return;
     const index = scrollToLine - 1;
     if (index >= 0 && index < lines.length) rowVirtualizer.scrollToIndex(index, { align: 'center' });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- see note above
   }, [scrollToLine, lines.length]);
 
   const numWidth = String(lines.length).length;
@@ -131,22 +119,14 @@ export const LogExplorerView = ({ rawLog, find, onMatches, theme, scrollToLine }
                 <span className="pl-3 pr-6">
                   {tokenizeLine(line).map((token, ti) =>
                     hasMatch ? (
-                      splitByMatch(token.text, find.query, find.caseSensitive).map((seg, si) =>
-                        seg.match ? (
-                          <mark
-                            key={`${ti}-${si}`}
-                            className={`rounded-sm px-0 ${
-                              isActive ? 'bg-warn text-background' : 'bg-warn/40 text-foreground'
-                            }`}
-                          >
-                            {seg.text}
-                          </mark>
-                        ) : (
-                          <span key={`${ti}-${si}`} className={token.cls}>
-                            {seg.text}
-                          </span>
-                        ),
-                      )
+                      <Highlighted
+                        key={ti}
+                        text={token.text}
+                        query={find.query}
+                        caseSensitive={find.caseSensitive}
+                        active={isActive}
+                        className={token.cls}
+                      />
                     ) : (
                       <span key={ti} className={token.cls}>
                         {token.text}

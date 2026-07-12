@@ -1,5 +1,6 @@
 import React from 'react';
 import { Search, ChevronsDownUp, ChevronsUpDown, X } from 'lucide-react';
+import { eventColorFor } from '../theme/eventColors';
 
 interface FilterBarProps {
   availableTypes: string[];
@@ -14,30 +15,11 @@ interface FilterBarProps {
   onCollapseAll: () => void;
 }
 
-// Full static class strings so Tailwind's scanner can see them (no runtime interpolation).
-const ACTIVE_CHIP: Record<string, string> = {
-  CODE_UNIT: 'bg-code-unit/15 text-code-unit ring-1 ring-inset ring-code-unit/40',
-  METHOD: 'bg-method/15 text-method ring-1 ring-inset ring-method/40',
-  TRIGGER: 'bg-trigger/15 text-trigger ring-1 ring-inset ring-trigger/40',
-  FLOW: 'bg-flow/15 text-flow ring-1 ring-inset ring-flow/40',
-  WORKFLOW: 'bg-workflow/15 text-workflow ring-1 ring-inset ring-workflow/40',
-  SOQL: 'bg-soql/15 text-soql ring-1 ring-inset ring-soql/40',
-  SOSL: 'bg-soql/15 text-soql ring-1 ring-inset ring-soql/40',
-  DML: 'bg-dml/15 text-dml ring-1 ring-inset ring-dml/40',
-  CALLOUT: 'bg-callout/15 text-callout ring-1 ring-inset ring-callout/40',
-  VALIDATION: 'bg-warn/10 text-validation ring-1 ring-inset ring-validation/40',
-  VF: 'bg-vf/15 text-vf ring-1 ring-inset ring-vf/40',
-  SYSTEM: 'bg-muted text-foreground ring-1 ring-inset ring-border',
-  DEBUG: 'bg-debug/15 text-debug ring-1 ring-inset ring-ring',
-  EXCEPTION: 'bg-error/15 text-error ring-1 ring-inset ring-error/40',
-  GENERIC: 'bg-muted text-foreground ring-1 ring-inset ring-border',
-};
-
 const INACTIVE_CHIP = 'bg-card text-muted-foreground hover:text-foreground hover:bg-accent';
 
 function chipClass(type: string, active: boolean): string {
   if (!active) return INACTIVE_CHIP;
-  return ACTIVE_CHIP[type] ?? ACTIVE_CHIP.GENERIC!;
+  return eventColorFor(type).activeChipClass;
 }
 
 export const FilterBar = ({

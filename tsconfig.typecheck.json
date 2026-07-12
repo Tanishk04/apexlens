@@ -1,0 +1,21 @@
+{
+  // Standalone type-check for the real app source (background/content/app),
+  // separate from the base tsconfig used by Vite/ts-jest so this can add the
+  // ambient `chrome` global (needed by background/content/api code) without
+  // touching those tools' existing, working configuration.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["chrome"],
+    "noEmit": true,
+    // Override the base config's Node-style per-file CJS/ESM detection (which
+    // reads package.json's "type" field) — this app is bundled by Vite, never
+    // run through Node's module resolver, and every source file is written as
+    // ESM regardless of package.json's "type" (kept as "commonjs" for the
+    // plain .js tool configs). Treating everything as ESM here avoids
+    // verbatimModuleSyntax errors that have nothing to do with real type bugs.
+    "module": "esnext",
+    "moduleResolution": "bundler"
+  },
+  "include": ["src"],
+  "exclude": ["src/__tests__"]
+}

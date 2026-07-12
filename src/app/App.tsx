@@ -23,7 +23,7 @@ import { Timeline } from './components/Timeline';
 import { CommandPalette, type Command as PaletteCommand } from './components/CommandPalette';
 import { analyze } from './utils/analysis';
 import { useTheme } from './utils/theme';
-import { buildAiContext, buildFullPrompt } from '../ai/context';
+import { buildAiContext, buildFullPrompt, type OutputFormatId } from '../ai/context';
 import { getProvider } from '../ai/adapter';
 import {
   flattenEventLines,
@@ -33,7 +33,7 @@ import {
   ancestorIds,
   collectExpandableIds,
 } from './utils/flattenTree';
-import { getSessionId, fetchLogBody } from '../api/salesforce';
+import { getSessionId, fetchLogBody, isAllowedSalesforceDomain } from '../api/salesforce';
 import { parseLogInWorker } from './utils/parseInWorker';
 import { SAMPLE_LOG } from './sampleLog';
 import type { ParsedDebugLog } from '../types';
@@ -122,6 +122,12 @@ const App = () => {
         } else if (!logId || !domain) {
           // Standalone launch (toolbar icon): show the landing state.
           return;
+        } else if (!isAllowedSalesforceDomain(domain)) {
+          // `domain`/`logId` arrive via URL query params — this page can only be
+          // reached first-party (background opens it via chrome.tabs.create), but
+          // fail closed rather than trust an unexpected domain unconditionally.
+          setError('Unrecognized Salesforce domain — refusing to fetch.');
+          return;
         } else {
           const sessionId = await getSessionId(domain);
           if (!sessionId) {
@@ -148,7 +154,7 @@ const App = () => {
       showDebug,
       collapsed,
       search,
-      types: activeTypes.size > 0 ? activeTypes : undefined,
+      ...(activeTypes.size > 0 ? { types: activeTypes } : {}),
     };
     const fromTree = flattenExecutionTree(parsedLog.executionTree, options);
     if (fromTree.length > 0 || parsedLog.executionTree?.children.length) return fromTree;
@@ -196,13 +202,19 @@ const App = () => {
 
   /** One-shot whole-log AI analysis: full raw log + structured summary. */
   const runAi = useCallback(
-    async (providerId: string, apiKey: string, model: string, baseUrl: string) => {
+    async (
+      providerId: string,
+      apiKey: string,
+      model: string,
+      baseUrl: string,
+      formatId: OutputFormatId,
+    ) => {
       if (!parsedLog || rawLog == null) return;
       const provider = getProvider(providerId, baseUrl);
       if (!provider) return;
       setAi({ loading: true, result: null, error: null });
       try {
-        const prompt = buildFullPrompt(rawLog, buildAiContext(parsedLog, analysis));
+        const prompt = buildFullPrompt(rawLog, buildAiContext(parsedLog, analysis), formatId);
         const result = await provider.explain(prompt, apiKey, model || undefined);
         setAi({ loading: false, result, error: null });
       } catch (err) {
@@ -244,25 +256,33 @@ const App = () => {
     revealNode(next.id);
   }, [parsedLog, selectedId, revealNode]);
 
-  const toggleNode = (id: string) =>
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  const toggleNode = useCallback(
+    (id: string) =>
+      setCollapsed((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      }),
+    [],
+  );
 
-  const toggleType = (type: string) =>
-    setActiveTypes((prev) => {
-      const next = new Set(prev);
-      if (next.has(type)) next.delete(type);
-      else next.add(type);
-      return next;
-    });
+  const toggleType = useCallback(
+    (type: string) =>
+      setActiveTypes((prev) => {
+        const next = new Set(prev);
+        if (next.has(type)) next.delete(type);
+        else next.add(type);
+        return next;
+      }),
+    [],
+  );
 
-  const expandAll = () => setCollapsed(new Set());
-  const collapseAll = () =>
-    setCollapsed(new Set(collectExpandableIds(parsedLog?.executionTree ?? null)));
+  const expandAll = useCallback(() => setCollapsed(new Set()), []);
+  const collapseAll = useCallback(
+    () => setCollapsed(new Set(collectExpandableIds(parsedLog?.executionTree ?? null))),
+    [parsedLog],
+  );
 
   // Global shortcuts: Ctrl/Cmd+K palette, Ctrl/Cmd+F in-app find.
   useEffect(() => {
@@ -374,8 +394,7 @@ const App = () => {
       });
     });
     return cmds;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [parsedLog, revealNode, toggleTheme]);
+  }, [parsedLog, revealNode, toggleTheme, expandAll, collapseAll]);
 
   if (loading) {
     return (
@@ -527,7 +546,7 @@ const App = () => {
           )}
         </div>
 
-        {(tab === 'tree' || tab === 'timeline') && selected ? (
+        {tab === 'tree' && selected ? (
           <DetailPanel
             selected={selected}
             exception={parsedLog?.exceptions.find((e) => e.id === selectedId) ?? null}

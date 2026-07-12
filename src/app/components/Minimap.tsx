@@ -17,7 +17,7 @@ interface Props {
   rowHeight: number;
   /** Row indexes with find matches (drawn in warn color). */
   matchIndexes?: number[];
-  theme?: string;
+  theme?: string | undefined;
 }
 
 const WIDTH = 72;
@@ -118,6 +118,7 @@ export const Minimap = ({ lines, scrollRef, rowHeight, matchIndexes, theme }: Pr
     return () => {
       scroller.removeEventListener('scroll', scheduleDraw);
       ro.disconnect();
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
   }, [scrollRef, scheduleDraw]);
 

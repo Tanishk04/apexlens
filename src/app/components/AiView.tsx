@@ -1,10 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Sparkles, Coins, Loader2, ExternalLink } from 'lucide-react';
+import { Sparkles, Coins, Loader2, ExternalLink, AlertTriangle } from 'lucide-react';
 import type { ParsedDebugLog } from '../../types';
 import type { Analysis } from '../utils/analysis';
-import { buildAiContext, FULL_LOG_CHAR_LIMIT } from '../../ai/context';
+import {
+  buildAiContext,
+  FULL_LOG_CHAR_LIMIT,
+  OUTPUT_FORMAT_OPTIONS,
+  DEFAULT_OUTPUT_FORMAT,
+  type OutputFormatId,
+} from '../../ai/context';
 import { PROVIDER_META, fetchOpenRouterModels, type ModelOption } from '../../ai/models';
 import { Markdown } from './Markdown';
+import { STORAGE_KEYS } from '../utils/storageKeys';
 
 interface Props {
   log: ParsedDebugLog | null;
@@ -12,7 +19,13 @@ interface Props {
   /** The raw log text — sent in full to the provider (user opt-in). */
   rawLog: string | null;
   ai: { loading: boolean; result: string | null; error: string | null };
-  onRun: (providerId: string, apiKey: string, model: string, baseUrl: string) => void;
+  onRun: (
+    providerId: string,
+    apiKey: string,
+    model: string,
+    baseUrl: string,
+    formatId: OutputFormatId,
+  ) => void;
 }
 
 const CUSTOM_MODEL = '__custom__';
@@ -22,19 +35,29 @@ const inputCls =
 // Selects: reserve room for the native arrow and ellipsize long option text.
 const selectCls = `${inputCls} truncate pr-7`;
 
+const FALLBACK_PROVIDER_ID = PROVIDER_META.find((p) => p.available)?.id ?? 'openrouter';
+
 export const AiView = ({ log, analysis, rawLog, ai, onRun }: Props) => {
-  const [providerId, setProviderId] = useState(
-    () => localStorage.getItem('sfda_ai_provider') ?? 'openrouter',
-  );
+  const [providerId, setProviderId] = useState(() => {
+    const stored = localStorage.getItem(STORAGE_KEYS.aiProvider) ?? FALLBACK_PROVIDER_ID;
+    const storedMeta = PROVIDER_META.find((p) => p.id === stored);
+    return storedMeta?.available ? stored : FALLBACK_PROVIDER_ID;
+  });
   const [apiKey, setApiKey] = useState(
-    () => localStorage.getItem(`sfda_ai_key_${providerId}`) ?? '',
+    () => localStorage.getItem(STORAGE_KEYS.aiKeyFor(providerId)) ?? '',
   );
-  const [baseUrl, setBaseUrl] = useState(() => localStorage.getItem('sfda_ai_baseurl') ?? '');
+  const [baseUrl, setBaseUrl] = useState(() => localStorage.getItem(STORAGE_KEYS.aiBaseUrl) ?? '');
   const [modelChoice, setModelChoice] = useState(
-    () => localStorage.getItem(`sfda_ai_model_${providerId}`) ?? '',
+    () => localStorage.getItem(STORAGE_KEYS.aiModelFor(providerId)) ?? '',
   );
   const [customModel, setCustomModel] = useState('');
   const [openRouterModels, setOpenRouterModels] = useState<ModelOption[]>([]);
+  const [formatId, setFormatId] = useState<OutputFormatId>(() => {
+    const stored = localStorage.getItem(STORAGE_KEYS.aiFormat);
+    return OUTPUT_FORMAT_OPTIONS.some((o) => o.id === stored)
+      ? (stored as OutputFormatId)
+      : DEFAULT_OUTPUT_FORMAT;
+  });
 
   const meta = PROVIDER_META.find((p) => p.id === providerId) ?? PROVIDER_META[0]!;
 
@@ -76,9 +99,9 @@ export const AiView = ({ log, analysis, rawLog, ai, onRun }: Props) => {
 
   const changeProvider = (id: string) => {
     setProviderId(id);
-    localStorage.setItem('sfda_ai_provider', id);
-    setApiKey(localStorage.getItem(`sfda_ai_key_${id}`) ?? '');
-    setModelChoice(localStorage.getItem(`sfda_ai_model_${id}`) ?? '');
+    localStorage.setItem(STORAGE_KEYS.aiProvider, id);
+    setApiKey(localStorage.getItem(STORAGE_KEYS.aiKeyFor(id)) ?? '');
+    setModelChoice(localStorage.getItem(STORAGE_KEYS.aiModelFor(id)) ?? '');
   };
 
   const keyMissing = meta.needsKey && !apiKey;
@@ -86,10 +109,11 @@ export const AiView = ({ log, analysis, rawLog, ai, onRun }: Props) => {
   const disabled = ai.loading || !log || !model || keyMissing || customUrlMissing;
 
   const run = () => {
-    localStorage.setItem(`sfda_ai_key_${providerId}`, apiKey);
-    localStorage.setItem(`sfda_ai_model_${providerId}`, modelChoice || model);
-    localStorage.setItem('sfda_ai_baseurl', baseUrl);
-    onRun(providerId, apiKey, model, baseUrl);
+    localStorage.setItem(STORAGE_KEYS.aiKeyFor(providerId), apiKey);
+    localStorage.setItem(STORAGE_KEYS.aiModelFor(providerId), modelChoice || model);
+    localStorage.setItem(STORAGE_KEYS.aiBaseUrl, baseUrl);
+    localStorage.setItem(STORAGE_KEYS.aiFormat, formatId);
+    onRun(providerId, apiKey, model, baseUrl, formatId);
   };
 
   return (
@@ -101,6 +125,9 @@ export const AiView = ({ log, analysis, rawLog, ai, onRun }: Props) => {
             <div className="flex items-center gap-2">
               <Sparkles size={16} className="text-vf" />
               <h2 className="text-sm font-medium text-foreground">AI Log Analysis</h2>
+              <span className="rounded-full border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                BYOK
+              </span>
             </div>
             {meta.keyUrl ? (
               <a
@@ -114,7 +141,7 @@ export const AiView = ({ log, analysis, rawLog, ai, onRun }: Props) => {
             ) : null}
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
             <label className="block text-xs text-muted-foreground">
               Provider
               <select
@@ -123,8 +150,9 @@ export const AiView = ({ log, analysis, rawLog, ai, onRun }: Props) => {
                 className={selectCls}
               >
                 {PROVIDER_META.map((p) => (
-                  <option key={p.id} value={p.id}>
+                  <option key={p.id} value={p.id} disabled={!p.available}>
                     {p.label}
+                    {p.available ? '' : ' (coming soon)'}
                   </option>
                 ))}
               </select>
@@ -147,8 +175,9 @@ export const AiView = ({ log, analysis, rawLog, ai, onRun }: Props) => {
                   ))}
                   <option value={CUSTOM_MODEL}>Custom model id…</option>
                 </select>
-              ) : (
-                // Other providers: free-form model id with curated suggestions.
+              ) : meta.models.length > 0 ? (
+                // Curated suggestions available (not reachable today — kept for when a
+                // disabled provider is re-enabled with a models[] list).
                 <>
                   <input
                     type="text"
@@ -164,6 +193,16 @@ export const AiView = ({ log, analysis, rawLog, ai, onRun }: Props) => {
                     ))}
                   </datalist>
                 </>
+              ) : (
+                // No curated list to suggest (e.g. Custom) — plain input, no native
+                // datalist dropdown arrow.
+                <input
+                  type="text"
+                  value={modelChoice}
+                  onChange={(e) => setModelChoice(e.target.value)}
+                  placeholder="model-id"
+                  className={`${inputCls} font-mono`}
+                />
               )}
             </label>
 
@@ -176,6 +215,25 @@ export const AiView = ({ log, analysis, rawLog, ai, onRun }: Props) => {
                 placeholder="sk-…"
                 className={`${inputCls} font-mono`}
               />
+            </label>
+
+            <label className="block text-xs text-muted-foreground">
+              Output detail
+              <select
+                value={formatId}
+                onChange={(e) => {
+                  const id = e.target.value as OutputFormatId;
+                  setFormatId(id);
+                  localStorage.setItem(STORAGE_KEYS.aiFormat, id);
+                }}
+                className={selectCls}
+              >
+                {OUTPUT_FORMAT_OPTIONS.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
             </label>
 
             {providerId === 'openrouter' && modelChoice === CUSTOM_MODEL ? (
@@ -205,30 +263,42 @@ export const AiView = ({ log, analysis, rawLog, ai, onRun }: Props) => {
             ) : null}
           </div>
 
-          <div className="mt-4 flex items-center justify-between gap-3">
-            <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
-              <Coins size={13} className="mt-0.5 shrink-0 text-validation" />
-              <span>
-                Sends the <strong className="text-foreground">entire raw log</strong> plus a
-                structured summary — about{' '}
-                <strong className="text-foreground">
-                  ~{tokenEstimate.toLocaleString()} tokens
-                </strong>{' '}
-                per run.
-                {providerId === 'openrouter'
-                  ? ' Models tagged (free) cost nothing on OpenRouter.'
-                  : ' API tokens will be consumed.'}
-                {clipped
-                  ? ' This log exceeds the context budget; the middle section will be clipped.'
-                  : ''}{' '}
-                Key stays in this browser.
-              </span>
-            </p>
+          <div className="mt-4 flex items-start justify-between gap-3">
+            <div className="space-y-1.5">
+              <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                <Coins size={13} className="mt-0.5 shrink-0 text-validation" />
+                <span>
+                  Sends the entire raw log + a structured summary — about{' '}
+                  <strong className="text-foreground">
+                    ~{tokenEstimate.toLocaleString()} tokens
+                  </strong>{' '}
+                  per run.
+                  {clipped
+                    ? ' This log exceeds the context budget; the middle section will be clipped.'
+                    : ''}
+                </span>
+              </p>
+              <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                <Sparkles size={13} className="mt-0.5 shrink-0 text-debug" />
+                <span>
+                  Bring your own key — your key and log data go straight from this browser to
+                  your chosen provider.
+                </span>
+              </p>
+              <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                <AlertTriangle size={13} className="mt-0.5 shrink-0 text-warn" />
+                <span>
+                  AI analysis can be wrong or incomplete.
+                  <br />
+                  Always verify findings against the log before acting on them.
+                </span>
+              </p>
+            </div>
             <button
               type="button"
               onClick={run}
               disabled={disabled}
-              className="flex shrink-0 items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex shrink-0 items-center gap-2 self-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {ai.loading ? (
                 <>
@@ -251,13 +321,17 @@ export const AiView = ({ log, analysis, rawLog, ai, onRun }: Props) => {
         ) : null}
         {ai.result ? (
           <section className="rounded-lg border border-border bg-card/30 p-5">
+            <p className="mb-3 flex items-center gap-1.5 border-b border-border pb-3 text-xs text-muted-foreground">
+              <AlertTriangle size={13} className="shrink-0 text-warn" />
+              AI-generated — may be inaccurate or incomplete. Verify against the raw log before
+              relying on it.
+            </p>
             <Markdown text={ai.result} />
           </section>
         ) : null}
         {!ai.result && !ai.error && !ai.loading ? (
           <p className="text-center text-xs text-muted-foreground/70">
-            The AI reads the whole log — exceptions, limits, timings, queries — in one pass. No
-            per-line clicking.
+            The AI reads the whole log — exceptions, limits, timings, queries.
           </p>
         ) : null}
       </div>

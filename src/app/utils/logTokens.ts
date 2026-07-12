@@ -1,4 +1,5 @@
 import { eventCategory } from '../../events';
+import { EVENT_COLORS, eventColorFor, type EventColorEntry } from '../theme/eventColors';
 
 export interface LineToken {
   text: string;
@@ -8,27 +9,21 @@ export interface LineToken {
 
 const TS_RE = /^(\d{2}:\d{2}:\d{2}\.\d+ \(\d+\))(\|)([A-Z0-9_]+)/;
 
-const CATEGORY_CLS: Record<string, string> = {
-  SOQL: 'text-soql',
-  SOSL: 'text-soql',
-  DML: 'text-dml',
-  CALLOUT: 'text-callout',
-  FLOW: 'text-flow',
-  WORKFLOW: 'text-workflow',
-  VALIDATION: 'text-validation',
-  VF: 'text-vf',
-  METHOD: 'text-method',
-  CODE_UNIT: 'text-code-unit',
-  EXCEPTION: 'text-error',
-  DEBUG: 'text-debug',
-  SYSTEM: 'text-system',
-  GENERIC: 'text-system',
-};
+/** Full color entry for a raw event name (handles exception/debug special-cases
+ * that aren't derivable from eventCategory() alone). */
+export function eventColorEntry(event: string): EventColorEntry {
+  if (event === 'EXCEPTION_THROWN' || event === 'FATAL_ERROR') return EVENT_COLORS.EXCEPTION!;
+  if (event.startsWith('USER_DEBUG')) return EVENT_COLORS.DEBUG!;
+  return eventColorFor(eventCategory(event));
+}
 
 export function eventClass(event: string): string {
-  if (event === 'EXCEPTION_THROWN' || event === 'FATAL_ERROR') return 'text-error';
-  if (event.startsWith('USER_DEBUG')) return 'text-debug';
-  return CATEGORY_CLS[eventCategory(event)] ?? 'text-system';
+  return eventColorEntry(event).textClass;
+}
+
+/** CSS var for a raw event name — avoids a class-string round trip for canvas draws. */
+export function eventCssVar(event: string): string {
+  return eventColorEntry(event).cssVar;
 }
 
 /**
