@@ -55,6 +55,23 @@ export function toMarkdown(log: ParsedDebugLog, analysis: Analysis): string {
     }
   }
 
+  const unrecognized = Object.entries(log.unrecognizedEvents ?? {}).sort((a, b) => b[1] - a[1]);
+  if (unrecognized.length > 0) {
+    out.push('## Unrecognized events');
+    out.push('');
+    out.push(
+      'Events this build could not classify. They still render as GENERIC rows — reporting them ' +
+        'as a gap is deliberate, since Salesforce does not publish a complete event catalog.',
+    );
+    out.push('');
+    out.push('| Event | Count |');
+    out.push('| --- | ---: |');
+    for (const [event, count] of unrecognized.slice(0, 20)) {
+      out.push(`| ${event} | ${count} |`);
+    }
+    out.push('');
+  }
+
   if (analysis.soqlInLoopCount > 0) {
     out.push(`> ⚠ ${analysis.soqlInLoopCount} SOQL quer${
       analysis.soqlInLoopCount === 1 ? 'y' : 'ies'

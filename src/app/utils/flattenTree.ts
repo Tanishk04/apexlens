@@ -99,11 +99,14 @@ export function flattenExecutionTree(
     }
 
     if (!statementVisible(node, options)) return;
-    if (!matches(node.type, node.text)) return;
+    // Filter and colour by the statement's real category when the parser knew
+    // one (e.g. SOQL for SOQL_EXECUTE_EXPLAIN); `type` remains the visibility key.
+    const displayType = node.category ?? node.type;
+    if (!matches(displayType, node.text)) return;
     result.push({
       id: node.id,
       depth,
-      type: node.type,
+      type: displayType,
       name: node.text,
       durationMs: 0,
       lineNumber: node.lineNumber,

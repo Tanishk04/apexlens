@@ -52,6 +52,12 @@ export interface StatementEvent {
   text: string;
   /** For VALIDATION_* statements. */
   validationResult?: 'PASS' | 'FAIL';
+  /**
+   * Display category from `eventCategory(event)`, when it is more specific than
+   * `type`. `type` stays a StatementType (it drives visibility rules); this is
+   * what the UI colours and filters by. Absent when the two would agree.
+   */
+  category?: NodeType;
 }
 
 export interface FlowNodeDetails {
@@ -148,6 +154,13 @@ export interface ParsedDebugLog {
   rawLineCount: number;
   truncated: boolean;
   eventLines: LogEventLine[];
+  /**
+   * Events the registry recognised in no way at all, with occurrence counts.
+   * Salesforce's published event catalog is incomplete (`LIMIT_USAGE`, the Wave
+   * and Data Access families), so this is how real logs — not docs — reveal what
+   * the registry is still missing. Absent when everything was recognised.
+   */
+  unrecognizedEvents?: Record<string, number>;
 }
 
 export interface LogEventLine {
@@ -156,6 +169,13 @@ export interface LogEventLine {
   payload: string;
   lineNumber: number;
   timestampNs: number;
+  /**
+   * Untimestamped lines that followed this event, joined by newlines. Salesforce
+   * splits large `System.debug()` output (a List, Map, or JSON blob) across many
+   * lines; without this, views reading `eventLines` — the Apex Debug tab — would
+   * show only the first. `payload` stays exactly as the Lexer produced it.
+   */
+  continuation?: string;
 }
 
 export interface LogToken {

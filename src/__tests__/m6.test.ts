@@ -124,5 +124,34 @@ describe('USER_DEBUG extraction (Debug tab source)', () => {
     expect(lines).toHaveLength(1);
     expect(lines[0]!.payload).toBe('INFO|hello world');
     expect(lines[0]!.lineNumber).toBe(7);
+    expect(lines[0]!.continuation).toBeUndefined();
+  });
+
+  // Salesforce splits a large System.debug() (a List, Map or JSON blob) across
+  // several lines. Only the first carries a timestamp, so the Apex Debug tab —
+  // which reads eventLines — used to show line 1 and silently drop the rest.
+  it('carries multi-line debug output as continuation, leaving payload untouched', () => {
+    const body = [
+      '10:00:00.0 (1000000)|USER_DEBUG|[7]|DEBUG|(Account:{Name=Acme},',
+      'Account:{Name=Globex},',
+      'Account:{Name=Initech})',
+      '10:00:00.0 (2000000)|METHOD_ENTRY|[1]|A.run',
+    ].join('\n');
+
+    const debug = parse(body).eventLines.find((l) => l.event === 'USER_DEBUG')!;
+    expect(debug.payload).toBe('DEBUG|(Account:{Name=Acme},');
+    expect(debug.continuation).toBe('Account:{Name=Globex},\nAccount:{Name=Initech})');
+  });
+
+  it('does not attach a following event’s lines to the previous event', () => {
+    const body = [
+      '10:00:00.0 (1000000)|USER_DEBUG|[7]|DEBUG|first',
+      '10:00:00.0 (2000000)|USER_DEBUG|[8]|DEBUG|second',
+      'trailing line of the second',
+    ].join('\n');
+
+    const debugs = parse(body).eventLines.filter((l) => l.event === 'USER_DEBUG');
+    expect(debugs[0]!.continuation).toBeUndefined();
+    expect(debugs[1]!.continuation).toBe('trailing line of the second');
   });
 });
