@@ -24,12 +24,18 @@ nowhere for your data to go except the destinations described below, all of whic
 ## Optional AI analysis (opt-in only)
 
 If you explicitly configure an AI provider and supply your own API key, ApexLens can send log data
-to analyze it — **only when you click "Analyze log" on the AI tab**, never automatically:
+to analyze it — **only when you click "Analyze log" on the AI tab**, never automatically.
 
-- **By default**, only a compact structured summary is sent (exception messages, governor-limit
-  percentages, slowest queries/methods) — never the raw log text.
-- **If you opt in** (visible in the UI before you run it), the complete raw log text is sent
-  instead, for a more thorough analysis.
+The **Send** control on the AI tab decides what leaves your browser. It defaults to summary-only,
+and your choice is shown — along with an estimated token count for exactly that choice — before you
+run anything:
+
+- **"Summary only" (the default).** Sends a compact structured summary: exception types and
+  messages, governor-limit percentages, the slowest queries and methods, DML counts. The raw log
+  text is **not** sent.
+- **"Full raw log".** Sends that same summary *plus* the complete raw log text, for a line-by-line
+  read. Debug logs frequently contain customer data in `System.debug` output and query results, so
+  this is never the default — you have to select it.
 - Either way, this data goes **directly from your browser to the provider you chose** —
   OpenRouter, Anthropic, OpenAI, a local Ollama instance, or any custom OpenAI-compatible endpoint
   you type in — using the API key you supplied. ApexLens's developer never sees this data or your

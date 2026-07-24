@@ -77,11 +77,19 @@ Module boundaries:
   view that colors log events (tree rows, raw log, flame chart, filter chips, minimap).
 - `src/app/components/` — presentation; talks to `utils`/`ai`, never to `chrome.*` directly.
 - `src/ai/` — provider registry, prompt building (with prompt-injection hardening), adapters.
-- `src/background/`, `src/content/` — the only two files that touch `chrome.*` extension APIs.
+- `src/background/`, `src/content/`, `src/api/salesforce.ts` — the only files that touch `chrome.*`
+  extension APIs (`tabs`/`runtime`, `runtime`, and `cookies` respectively).
 
-The parser is registry-driven: a single event catalog (`src/events.ts`) maps every Salesforce log
-event across all 9 log categories to a node type. Unknown events fall through to a generic node so
-new API versions never break parsing.
+The parser is registry-driven: a single event catalog (`src/events.ts`) maps Salesforce log events
+across every log category to a node type, sourced from Salesforce's published *Debug Log Levels*
+matrix. Events are bucketed as entry / exit / point / noise / block — getting that wrong is not
+cosmetic, since an entry nothing closes silently shifts every later duration by a level.
+
+That catalog is deliberately not treated as complete: Salesforce does not document everything it
+emits (`LIMIT_USAGE`, the Wave and Data Access families). So unknown events still render as generic
+nodes — new API versions never break parsing — and the parser additionally reports them under
+`unrecognizedEvents`, surfaced in the Summary tab, so real logs rather than documentation drive
+what the registry learns next.
 
 ## Privacy
 
