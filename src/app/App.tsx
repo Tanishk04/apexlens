@@ -23,7 +23,14 @@ import { Timeline } from './components/Timeline';
 import { CommandPalette, type Command as PaletteCommand } from './components/CommandPalette';
 import { analyze } from './utils/analysis';
 import { useTheme } from './utils/theme';
-import { buildAiContext, buildFullPrompt, type OutputFormatId } from '../ai/context';
+import {
+  buildAiContext,
+  buildPrompt,
+  buildFullPrompt,
+  DEFAULT_SEND_SCOPE,
+  type AiSendScope,
+  type OutputFormatId,
+} from '../ai/context';
 import { getProvider } from '../ai/adapter';
 import {
   flattenEventLines,
@@ -164,8 +171,14 @@ const App = () => {
   const availableTypes = useMemo(() => {
     const present = new Set<string>();
     for (const node of nodeIndex.values()) {
-      if ('children' in node && node.synthetic) continue;
-      present.add(node.type);
+      if ('children' in node) {
+        if (node.synthetic) continue;
+        present.add(node.type);
+      } else {
+        // Statements are filtered by their display category, so the chips must
+        // offer the same value the rows carry (see flattenExecutionTree).
+        present.add(node.category ?? node.type);
+      }
     }
     return TYPE_ORDER.filter((t) => present.has(t));
   }, [nodeIndex]);
@@ -200,7 +213,10 @@ const App = () => {
     setScrollToLine(line);
   }, []);
 
-  /** One-shot whole-log AI analysis: full raw log + structured summary. */
+  /**
+   * One-shot AI analysis. `scope` decides what actually leaves the browser: the
+   * structured summary alone (default), or the summary plus the full raw log.
+   */
   const runAi = useCallback(
     async (
       providerId: string,
@@ -208,13 +224,18 @@ const App = () => {
       model: string,
       baseUrl: string,
       formatId: OutputFormatId,
+      scope: AiSendScope = DEFAULT_SEND_SCOPE,
     ) => {
-      if (!parsedLog || rawLog == null) return;
+      if (!parsedLog) return;
       const provider = getProvider(providerId, baseUrl);
       if (!provider) return;
       setAi({ loading: true, result: null, error: null });
       try {
-        const prompt = buildFullPrompt(rawLog, buildAiContext(parsedLog, analysis), formatId);
+        const context = buildAiContext(parsedLog, analysis);
+        const prompt =
+          scope === 'full' && rawLog != null
+            ? buildFullPrompt(rawLog, context, formatId)
+            : buildPrompt(context, formatId);
         const result = await provider.explain(prompt, apiKey, model || undefined);
         setAi({ loading: false, result, error: null });
       } catch (err) {
