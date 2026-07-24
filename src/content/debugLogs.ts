@@ -26,6 +26,18 @@ function isDebugLogsPage(): boolean {
   );
 }
 
+/**
+ * Could this frame ever *become* the Debug Logs page without a reload? Lightning
+ * Setup is a SPA, so we must keep watching there — but only there. Ordinary
+ * record/home pages can never navigate into Setup in-place, and attaching a
+ * subtree observer to every frame of every Salesforce page would tax the user's
+ * tab for nothing.
+ */
+function isSetupContext(): boolean {
+  const path = location.pathname;
+  return path.includes('/lightning/setup') || path.includes('/setup/') || isDebugLogsPage();
+}
+
 const BTN_CLASS = 'sfda-analyze-btn';
 
 function makeButton(logId: string): HTMLButtonElement {
@@ -66,14 +78,44 @@ function injectButtons(): void {
   }
 }
 
+/**
+ * True if a batch of mutations contains nothing but our own injected buttons.
+ * `injectButtons` appends to the very tree we observe, so without this the
+ * observer re-triggers itself on every insertion.
+ */
+export function isSelfMutation(records: MutationRecord[]): boolean {
+  return records.every((record) =>
+    Array.from(record.addedNodes).every(
+      (node) => node instanceof HTMLElement && node.classList.contains(BTN_CLASS),
+    ),
+  );
+}
+
 function main(): void {
   if (typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) return;
-  if (!isDebugLogsPage()) return;
+  if (!isSetupContext()) return;
 
-  injectButtons();
+  let scheduled = 0;
+  const scheduleInject = () => {
+    if (scheduled) return;
+    scheduled = requestAnimationFrame(() => {
+      scheduled = 0;
+      // Re-checked per run, not once at load: Lightning is a SPA, so the user can
+      // navigate into Setup ▸ Debug Logs without a page load. Testing only at
+      // document_idle meant the button never appeared on that path.
+      if (isDebugLogsPage()) injectButtons();
+    });
+  };
 
-  // Classic tables re-render on sort/refresh; re-inject on DOM changes.
-  const observer = new MutationObserver(() => injectButtons());
+  scheduleInject();
+
+  // Classic tables re-render on sort/refresh, and Lightning mutates constantly.
+  // Coalesce to one pass per frame — injectButtons scans the whole document, so
+  // running it per mutation record was a real cost on the user's Salesforce tab.
+  const observer = new MutationObserver((records) => {
+    if (isSelfMutation(records)) return;
+    scheduleInject();
+  });
   observer.observe(document.body, { childList: true, subtree: true });
 }
 
