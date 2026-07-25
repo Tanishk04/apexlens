@@ -7,6 +7,9 @@ import {
   FULL_LOG_CHAR_LIMIT,
   OUTPUT_FORMAT_OPTIONS,
   DEFAULT_OUTPUT_FORMAT,
+  SEND_SCOPE_OPTIONS,
+  DEFAULT_SEND_SCOPE,
+  type AiSendScope,
   type OutputFormatId,
 } from '../../ai/context';
 import { PROVIDER_META, fetchOpenRouterModels, type ModelOption } from '../../ai/models';
@@ -16,7 +19,7 @@ import { STORAGE_KEYS } from '../utils/storageKeys';
 interface Props {
   log: ParsedDebugLog | null;
   analysis: Analysis;
-  /** The raw log text — sent in full to the provider (user opt-in). */
+  /** The raw log text — only sent when the user picks the "Full raw log" scope. */
   rawLog: string | null;
   ai: { loading: boolean; result: string | null; error: string | null };
   onRun: (
@@ -25,6 +28,7 @@ interface Props {
     model: string,
     baseUrl: string,
     formatId: OutputFormatId,
+    scope: AiSendScope,
   ) => void;
 }
 
@@ -58,6 +62,14 @@ export const AiView = ({ log, analysis, rawLog, ai, onRun }: Props) => {
       ? (stored as OutputFormatId)
       : DEFAULT_OUTPUT_FORMAT;
   });
+  // How much leaves the browser. Defaults to summary-only: debug logs routinely
+  // contain customer data, so sending the whole thing is an explicit choice.
+  const [scope, setScope] = useState<AiSendScope>(() => {
+    const stored = localStorage.getItem(STORAGE_KEYS.aiScope);
+    return SEND_SCOPE_OPTIONS.some((o) => o.id === stored)
+      ? (stored as AiSendScope)
+      : DEFAULT_SEND_SCOPE;
+  });
 
   const meta = PROVIDER_META.find((p) => p.id === providerId) ?? PROVIDER_META[0]!;
 
@@ -87,15 +99,15 @@ export const AiView = ({ log, analysis, rawLog, ai, onRun }: Props) => {
         : modelChoice || options[0]?.id || ''
       : modelChoice || meta.models[0] || '';
 
-  // Rough token estimate for the full prompt (raw log + structured summary).
+  // Rough token estimate for what the CURRENT scope would actually send.
   const tokenEstimate = useMemo(() => {
     if (!log) return 0;
     const contextChars = JSON.stringify(buildAiContext(log, analysis)).length;
-    const logChars = Math.min(rawLog?.length ?? 0, FULL_LOG_CHAR_LIMIT);
+    const logChars = scope === 'full' ? Math.min(rawLog?.length ?? 0, FULL_LOG_CHAR_LIMIT) : 0;
     return Math.ceil((contextChars + logChars) / 4);
-  }, [log, analysis, rawLog]);
+  }, [log, analysis, rawLog, scope]);
 
-  const clipped = (rawLog?.length ?? 0) > FULL_LOG_CHAR_LIMIT;
+  const clipped = scope === 'full' && (rawLog?.length ?? 0) > FULL_LOG_CHAR_LIMIT;
 
   const changeProvider = (id: string) => {
     setProviderId(id);
@@ -113,7 +125,8 @@ export const AiView = ({ log, analysis, rawLog, ai, onRun }: Props) => {
     localStorage.setItem(STORAGE_KEYS.aiModelFor(providerId), modelChoice || model);
     localStorage.setItem(STORAGE_KEYS.aiBaseUrl, baseUrl);
     localStorage.setItem(STORAGE_KEYS.aiFormat, formatId);
-    onRun(providerId, apiKey, model, baseUrl, formatId);
+    localStorage.setItem(STORAGE_KEYS.aiScope, scope);
+    onRun(providerId, apiKey, model, baseUrl, formatId, scope);
   };
 
   return (
@@ -236,6 +249,25 @@ export const AiView = ({ log, analysis, rawLog, ai, onRun }: Props) => {
               </select>
             </label>
 
+            <label className="block text-xs text-muted-foreground">
+              Send
+              <select
+                value={scope}
+                onChange={(e) => {
+                  const id = e.target.value as AiSendScope;
+                  setScope(id);
+                  localStorage.setItem(STORAGE_KEYS.aiScope, id);
+                }}
+                className={selectCls}
+              >
+                {SEND_SCOPE_OPTIONS.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
             {providerId === 'openrouter' && modelChoice === CUSTOM_MODEL ? (
               <label className="block text-xs text-muted-foreground">
                 Custom model id
@@ -268,7 +300,19 @@ export const AiView = ({ log, analysis, rawLog, ai, onRun }: Props) => {
               <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
                 <Coins size={13} className="mt-0.5 shrink-0 text-validation" />
                 <span>
-                  Sends the entire raw log + a structured summary — about{' '}
+                  {scope === 'full' ? (
+                    <>
+                      Sends a structured summary <strong className="text-foreground">and the
+                      entire raw log</strong> — including any customer data in your debug output.
+                    </>
+                  ) : (
+                    <>
+                      Sends only a structured summary (exception messages, limit percentages,
+                      slowest queries and methods) — <strong className="text-foreground">not the
+                      raw log</strong>.
+                    </>
+                  )}{' '}
+                  About{' '}
                   <strong className="text-foreground">
                     ~{tokenEstimate.toLocaleString()} tokens
                   </strong>{' '}
@@ -331,7 +375,9 @@ export const AiView = ({ log, analysis, rawLog, ai, onRun }: Props) => {
         ) : null}
         {!ai.result && !ai.error && !ai.loading ? (
           <p className="text-center text-xs text-muted-foreground/70">
-            The AI reads the whole log — exceptions, limits, timings, queries.
+            {scope === 'full'
+              ? 'The AI reads the whole log — exceptions, limits, timings, queries.'
+              : 'The AI reads the summary — exceptions, limits, timings, queries. Switch Send to “Full raw log” for a line-by-line read.'}
           </p>
         ) : null}
       </div>

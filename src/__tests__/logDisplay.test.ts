@@ -28,6 +28,23 @@ describe('logDisplay', () => {
     ).toBe('CaseCommandPanelController.queryCase(Id)');
   });
 
+  describe('USER_DEBUG messages', () => {
+    // The Lexer strips the `[line]` token into LogToken.lineNumber, so payload
+    // here is LEVEL|message — not [line]|LEVEL|message.
+    it('keeps the whole message after the level', () => {
+      expect(formatEventLabel('USER_DEBUG', 'DEBUG|Hello World')).toBe('Hello World');
+    });
+
+    it('preserves pipes inside the message', () => {
+      expect(formatEventLabel('USER_DEBUG', 'DEBUG|Name|Value')).toBe('Name|Value');
+      expect(formatEventLabel('USER_DEBUG', 'ERROR|a|b|c')).toBe('a|b|c');
+    });
+
+    it('survives a message-only payload', () => {
+      expect(formatEventLabel('USER_DEBUG', 'bare message')).toBe('bare message');
+    });
+  });
+
   it('hides noisy events by default', () => {
     expect(isNoiseEvent('HEAP_ALLOCATE')).toBe(true);
     expect(isNoiseEvent('VARIABLE_SCOPE_BEGIN')).toBe(true);

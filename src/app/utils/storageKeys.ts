@@ -5,6 +5,7 @@ export const STORAGE_KEYS = {
   aiProvider: 'sfda_ai_provider',
   aiBaseUrl: 'sfda_ai_baseurl',
   aiFormat: 'sfda_ai_format',
+  aiScope: 'sfda_ai_scope',
   aiKeyFor: (providerId: string) => `sfda_ai_key_${providerId}`,
   aiModelFor: (providerId: string) => `sfda_ai_model_${providerId}`,
   openRouterModelsCache: 'sfda_openrouter_models_v2',

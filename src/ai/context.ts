@@ -2,9 +2,13 @@ import type { ParsedDebugLog } from '../types';
 import type { Analysis } from '../app/utils/analysis';
 
 /**
- * Compact, structured summary of a debug log for an LLM. This is the ONLY thing
- * ever sent to an AI provider — never the raw log. It is deliberately trimmed so
+ * Compact, structured summary of a debug log for an LLM: deliberately trimmed so
  * even a 20MB log becomes a few kilobytes of JSON.
+ *
+ * This is what the default "Summary only" send scope transmits. The user can opt
+ * into "Full raw log" (see AiSendScope), which additionally includes the entire
+ * log text — debug logs routinely contain customer data, so that choice is
+ * explicit, per-run, and never the default.
  */
 export interface AiContext {
   summary: {
@@ -100,6 +104,20 @@ export interface AiPrompt {
   system: string;
   user: string;
 }
+
+/**
+ * How much of the log leaves the browser on a run.
+ *  - `summary`: the structured AiContext only. The default.
+ *  - `full`: the summary plus the complete raw log text.
+ */
+export type AiSendScope = 'summary' | 'full';
+
+export const DEFAULT_SEND_SCOPE: AiSendScope = 'summary';
+
+export const SEND_SCOPE_OPTIONS: { id: AiSendScope; label: string }[] = [
+  { id: 'summary', label: 'Summary only' },
+  { id: 'full', label: 'Full raw log' },
+];
 
 /** System + user prompt for the summary-only diagnosis request. */
 export function buildPrompt(

@@ -66,8 +66,12 @@ export function formatEventLabel(event: string, payload: string): string {
     case 'VALIDATION_FORMULA':
       return parts[0] || payload || event;
     case 'USER_DEBUG':
-      // [line]|LEVEL|message
-      return parts.length >= 3 ? parts.slice(2).join('|') : parts[parts.length - 1] || payload;
+      // Payload is LEVEL|message — the Lexer already captured the `[line]` token
+      // into LogToken.lineNumber, so it is NOT part of `payload` here. Keeping
+      // every field after the level matters because messages legitimately contain
+      // pipes (serialized records, delimited dumps); slicing from 2 silently ate
+      // the first segment of those.
+      return parts.length >= 2 ? parts.slice(1).join('|') : parts[parts.length - 1] || payload;
     case 'CALLOUT_REQUEST':
     case 'CALLOUT_RESPONSE':
     case 'NAMED_CREDENTIAL_REQUEST':

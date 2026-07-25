@@ -7,6 +7,8 @@ import {
   AI_SYSTEM_PROMPT,
   OUTPUT_FORMAT_OPTIONS,
   DEFAULT_OUTPUT_FORMAT,
+  SEND_SCOPE_OPTIONS,
+  DEFAULT_SEND_SCOPE,
 } from '../ai/context';
 import { PROVIDER_META } from '../ai/models';
 
@@ -63,6 +65,37 @@ describe('output format presets', () => {
   it('buildPrompt (summary-only path) also accepts a formatId', () => {
     const { user } = buildPrompt(ctx(), 'brief');
     expect(user).toMatch(/ONLY a "## Verdict" section/i);
+  });
+});
+
+/**
+ * PRIVACY.md promises summary-only by default. Before this, App.runAi always
+ * called buildFullPrompt and buildPrompt was dead code — the shipped policy and
+ * the shipped behaviour disagreed, on logs that routinely carry customer data.
+ */
+describe('AI send scope', () => {
+  const RAW = '10:00:00.0 (1)|USER_DEBUG|[1]|DEBUG|secret-customer-value';
+
+  it('defaults to summary-only', () => {
+    expect(DEFAULT_SEND_SCOPE).toBe('summary');
+    expect(SEND_SCOPE_OPTIONS.map((o) => o.id)).toEqual(['summary', 'full']);
+  });
+
+  it('summary scope never carries the raw log text', () => {
+    const prompt = buildPrompt(ctx());
+    expect(prompt.user).not.toContain('secret-customer-value');
+    expect(prompt.user).not.toContain('Complete raw debug log');
+  });
+
+  it('full scope carries the raw log verbatim', () => {
+    const prompt = buildFullPrompt(RAW, ctx());
+    expect(prompt.user).toContain('secret-customer-value');
+    expect(prompt.user).toContain('Complete raw debug log');
+  });
+
+  it('both scopes keep the guardrail system prompt', () => {
+    expect(buildPrompt(ctx()).system).toBe(AI_SYSTEM_PROMPT);
+    expect(buildFullPrompt(RAW, ctx()).system).toBe(AI_SYSTEM_PROMPT);
   });
 });
 

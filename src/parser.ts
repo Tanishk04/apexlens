@@ -15,7 +15,11 @@ import {
   isEntryEvent,
   isExitEvent,
   isNoiseEvent,
+  isBlockEvent,
+  isUnrecognizedEvent,
   entryNodeType,
+  eventCategory,
+  EXIT_TO_ENTRY,
   LIMIT_BLOCK_STARTS,
 } from './events';
 
@@ -148,15 +152,12 @@ export class TreeBuilder {
     }
 
     if (isExitEvent(event)) {
-      if (this.stack.length > 1) {
-        const node = this.stack.pop()!;
-        node.durationNs = timestampNs - node.timestamp;
-        if (event === 'SOQL_EXECUTE_END' || event === 'SOSL_EXECUTE_END') {
-          const rows = this.rowsFrom(payload);
-          if (rows != null) {
-            node.soqlRows = rows;
-            this.counters.soqlRows += rows;
-          }
+      const node = this.closeForExit(event, timestampNs);
+      if (node && (event === 'SOQL_EXECUTE_END' || event === 'SOSL_EXECUTE_END')) {
+        const rows = this.rowsFrom(payload);
+        if (rows != null) {
+          node.soqlRows = rows;
+          this.counters.soqlRows += rows;
         }
       }
       this.lastStatement = null;
@@ -205,12 +206,57 @@ export class TreeBuilder {
     }
 
     if (isNoiseEvent(event) || event === 'EXECUTION_STARTED' || event === 'EXECUTION_FINISHED') {
+      // Clear BOTH continuation targets. Leaving lastException set here let a
+      // later block body (e.g. a STATIC_VARIABLE_LIST dump) get appended to an
+      // unrelated earlier exception's stack trace.
       this.lastStatement = null;
+      this.lastException = null;
       return;
     }
 
     // Unknown / other displayable event → generic statement (never dropped).
     this.pushStatement(token, 'GENERIC');
+  }
+
+  /**
+   * Close the node an exit event belongs to, and return it.
+   *
+   * Salesforce logs are well nested, so popping the stack top is right almost
+   * always — but not when an event only *looks* like a pair. An unpaired entry
+   * left a node the top-pop then consumed on some later, unrelated exit; from
+   * that point every duration in the transaction was attributed one level off,
+   * and because exits ignored names it never resynced. POINT_EVENTS keeps the
+   * known offenders out of the pairing entirely; this adds the second guard.
+   *
+   * For an exit we can name (EXIT_TO_ENTRY), find the nearest matching open node
+   * and force-close anything above it — the same treatment `finalize()` gives
+   * nodes left open at EOF. If nothing matches, the exit is spurious: ignore it
+   * rather than closing a node it has nothing to do with. Unmapped exit names
+   * keep the old top-pop, so future/renamed API events still nest.
+   */
+  private closeForExit(event: string, timestampNs: number): ExecutionNode | null {
+    const expectedEntry = EXIT_TO_ENTRY[event];
+
+    if (expectedEntry !== undefined) {
+      let match = -1;
+      for (let i = this.stack.length - 1; i >= 1; i--) {
+        if (this.stack[i]!.event === expectedEntry) {
+          match = i;
+          break;
+        }
+      }
+      if (match < 0) return null; // spurious exit — nothing it could close
+      while (this.stack.length - 1 > match) {
+        const orphan = this.stack.pop()!;
+        orphan.unclosed = true;
+        orphan.durationNs = Math.max(0, timestampNs - orphan.timestamp);
+      }
+    }
+
+    if (this.stack.length <= 1) return null;
+    const node = this.stack.pop()!;
+    node.durationNs = timestampNs - node.timestamp;
+    return node;
   }
 
   /** Append an untimestamped continuation line (multi-line debug or stack trace). */
@@ -234,6 +280,12 @@ export class TreeBuilder {
       rawLine: token.rawLine,
       text: formatEventLabel(token.event, token.payload),
     };
+    // Statements carry the category the registry already knows, rather than
+    // inheriting the coarse StatementType. Without this, everything reaching the
+    // GENERIC fallthrough rendered as an unknown grey row — including events we
+    // classify perfectly well, e.g. SOQL_EXECUTE_EXPLAIN, which is SOQL.
+    const category = eventCategory(token.event);
+    if (category !== 'GENERIC') stmt.category = category;
     this.top().children.push(stmt);
     this.lastStatement = stmt;
     this.lastException = null;
@@ -356,6 +408,14 @@ export class TreeBuilder {
   }
 }
 
+/**
+ * State for the multi-line blocks Salesforce emits — an event line followed by
+ * untimestamped body lines. `limits` bodies become governor metrics; `skip`
+ * bodies (variable dumps) are discarded. Outside a block, an untimestamped line
+ * is a genuine continuation of the previous statement.
+ */
+type BlockState = { kind: 'limits'; ns: string } | { kind: 'skip' } | null;
+
 /** Main streaming parser. */
 export class SalesforceLogParser {
   private scanner = new StreamScanner();
@@ -366,10 +426,14 @@ export class SalesforceLogParser {
   private lineCount = 0;
   private truncated = false;
   private eventLines: LogEventLine[] = [];
+  /** Most recent event line, so its untimestamped continuation can be attached. */
+  private lastEventLine: LogEventLine | null = null;
+  /** Events the registry could not recognise at all, with occurrence counts. */
+  private unrecognized: Record<string, number> = {};
 
-  // Governor-limit block state.
+  // Governor-limit / multi-line block state.
   private limits: Record<string, LimitMetric[]> = {};
-  private currentLimitNs: string | null = null;
+  private currentBlock: BlockState = null;
 
   public parseChunk(chunk: string): void {
     for (const line of this.scanner.pushChunk(chunk)) {
@@ -389,7 +453,7 @@ export class SalesforceLogParser {
 
     const metrics = this.buildMetrics(governorLimits);
 
-    return {
+    const result: ParsedDebugLog = {
       id: 'log_' + Date.now(),
       header: this.header,
       executionTree: this.builder.getRoot(),
@@ -400,6 +464,10 @@ export class SalesforceLogParser {
       truncated: this.truncated,
       eventLines: this.eventLines,
     };
+    if (Object.keys(this.unrecognized).length > 0) {
+      result.unrecognizedEvents = this.unrecognized;
+    }
+    return result;
   }
 
   private processLine(line: string): void {
@@ -418,26 +486,39 @@ export class SalesforceLogParser {
     const token = this.lexer.tokenize(line);
 
     if (!token) {
-      // Untimestamped line: either a governor-limit body row or a continuation.
-      if (this.currentLimitNs !== null && this.tryLimitLine(line)) return;
+      // Untimestamped line. Inside a block it belongs to the block: parse it as a
+      // limit row, or drop it. Only outside a block is it a real continuation of
+      // the previous statement.
+      if (this.currentBlock !== null) {
+        if (this.currentBlock.kind === 'limits') this.tryLimitLine(line);
+        return;
+      }
       this.builder.appendContinuation(line);
+      this.appendEventContinuation(line);
       return;
     }
 
     token.rawLine = this.lineCount;
 
-    this.eventLines.push({
+    const eventLine: LogEventLine = {
       id: `l${this.lineCount}`,
       event: token.event,
       payload: token.payload,
       lineNumber: token.lineNumber,
       timestampNs: token.timestampNs,
-    });
+    };
+    this.eventLines.push(eventLine);
+    this.lastEventLine = eventLine;
+
+    if (isUnrecognizedEvent(token.event)) {
+      this.unrecognized[token.event] = (this.unrecognized[token.event] ?? 0) + 1;
+    }
 
     // Governor-limit block handling (multi-line; body follows on plain lines).
     if (token.event === 'LIMIT_USAGE_FOR_NS') {
-      this.currentLimitNs = this.extractNs(token.payload);
-      if (!this.limits[this.currentLimitNs]) this.limits[this.currentLimitNs] = [];
+      const ns = this.extractNs(token.payload);
+      this.currentBlock = { kind: 'limits', ns };
+      if (!this.limits[ns]) this.limits[ns] = [];
       return;
     }
     if (LIMIT_BLOCK_STARTS.has(token.event)) {
@@ -450,18 +531,42 @@ export class SalesforceLogParser {
       token.event === 'CUMULATIVE_PROFILING' ||
       token.event === 'CUMULATIVE_PROFILING_BEGIN'
     ) {
-      this.currentLimitNs = null;
+      this.currentBlock = null;
+      return;
+    }
+    // Profiling dumps (STATIC_VARIABLE_LIST, STACK_FRAME_VARIABLE_LIST): open a
+    // skip block so the body is discarded. processToken still runs so the noise
+    // path clears the continuation targets.
+    if (isBlockEvent(token.event)) {
+      this.currentBlock = { kind: 'skip' };
+      this.builder.processToken(token);
       return;
     }
 
-    // Any other real event ends the current NS block.
-    this.currentLimitNs = null;
+    // Any other real event ends the current block.
+    this.currentBlock = null;
     this.builder.processToken(token);
+  }
+
+  /**
+   * Attach an untimestamped line to the event that owns it. Bounded by the same
+   * MAX_CONTINUATION budget the tree uses, so a pathological single-line payload
+   * can't grow this without limit.
+   */
+  private appendEventContinuation(line: string): void {
+    const target = this.lastEventLine;
+    if (!target) return;
+    const existing = target.continuation;
+    if (existing === undefined) {
+      target.continuation = line;
+    } else if (existing.length < MAX_CONTINUATION) {
+      target.continuation = existing + '\n' + line;
+    }
   }
 
   private tryLimitLine(line: string): boolean {
     const m = line.match(/^\s*(.+?):\s*([\d,]+)\s+out of\s+([\d,]+)/);
-    if (!m || this.currentLimitNs === null) return false;
+    if (!m || this.currentBlock?.kind !== 'limits') return false;
     const used = parseInt(m[2]!.replace(/,/g, ''), 10);
     const allowed = parseInt(m[3]!.replace(/,/g, ''), 10);
     const metric: LimitMetric = {
@@ -470,7 +575,7 @@ export class SalesforceLogParser {
       allowed,
       percentage: allowed > 0 ? used / allowed : 0,
     };
-    this.limits[this.currentLimitNs]!.push(metric);
+    this.limits[this.currentBlock.ns]!.push(metric);
     return true;
   }
 
