@@ -9,8 +9,15 @@ nowhere for your data to go except the destinations described below, all of whic
 
 - **Salesforce session cookie.** ApexLens reads your active Salesforce session cookie (`sid`) via
   the Chrome `cookies` permission, scoped only to `*.salesforce.com`, `*.force.com`, and
-  `*.salesforce-setup.com` domains. It's used solely to fetch the specific debug log body you click
-  **Analyze** on, via Salesforce's own Tooling API — using your own session, as you.
+  `*.salesforce-setup.com` domains. It is used only to read debug logs from your own org via
+  Salesforce's own Tooling API — using your own session, as you.
+- **Debug log bodies, in two situations.** When you click **Analyze** on a log, ApexLens fetches
+  that log in full. Separately, on the Setup ▸ Debug Logs list, it reads the *beginning* of each
+  log that scrolls into view in order to fill the Type / Class / Method columns — it requests only
+  the first 64 KB and stops as soon as it finds the first code-unit line, typically within a few
+  hundred bytes, and never downloads those logs in full. Both requests go to your org and nowhere
+  else. The columns can be switched off, or set to only run when you click, in the extension's
+  Settings page.
 - **The debug log content itself.** Once fetched (or opened from a local `.log` file), the log is
   parsed entirely inside the extension, in your browser. Nothing is uploaded anywhere by default.
 
@@ -46,7 +53,17 @@ run anything:
 
 ## Data retention
 
-ApexLens itself retains nothing beyond your browser's local storage (theme preference, your chosen
+ApexLens caches the entry point it read for each log (the class, trigger or flow name, plus the log
+id) in the extension's local storage, so revisiting the Debug Logs list doesn't re-read the same
+logs. It holds the most recent 500 and stores no other part of any log. Clearing the extension's
+site data removes it.
+
+**Nothing is cached from a private window.** Chrome shares extension storage between normal and
+Incognito sessions even though it separates their cookies, so writing there would leave a durable
+record of which logs — and therefore which Apex classes — you looked at privately. ApexLens skips
+those writes entirely; private-window lookups are resolved fresh each time and forgotten.
+
+Beyond that, ApexLens retains nothing outside your browser's local storage (theme preference, your chosen
 AI provider/model settings, and your API key if you've entered one — all removable by clearing the
 extension's site data in Chrome). Whether the AI provider you chose retains what you send them is
 governed by *their* privacy policy, not this one.

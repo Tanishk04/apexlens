@@ -159,6 +159,12 @@ export const POINT_EVENTS: Set<string> = new Set([
   'WF_SPOOL_ACTION_BEGIN',
   'WF_ACTIONS_END',
   'SLA_END',
+  // Emitted once per interview *after* FLOW_START_INTERVIEW_END has already
+  // closed it, so it opens nothing and must close nothing. Absent from the
+  // published catalog — which lists only FLOW_INTERVIEW_FINISHED_LIMIT_USAGE —
+  // but present 13 times, unpaired, in a real workflow-heavy log. Without this
+  // it matches the `_FINISHED` suffix fallback and pops a node it never opened.
+  'FLOW_INTERVIEW_FINISHED',
 ]);
 
 /**
@@ -188,6 +194,26 @@ export const NON_PAIR_EVENTS: Set<string> = new Set([
   'TESTING_LIMITS',
   'FLOW_INTERVIEW_FINISHED_LIMIT_USAGE',
 ]);
+
+/**
+ * Entry events Salesforce is known to log as a *burst* — several identical
+ * BEGINs back-to-back (one per record in a bulk-processed batch), all closed
+ * by an equal-count burst of ENDs later, rather than one BEGIN/END pair per
+ * invocation. Confirmed in a real workflow log: `WF_FLOW_ACTION_BEGIN` fires
+ * 6 times in a row (same id, a batch of 6 records) with zero events between
+ * them, then all 6 matching `WF_FLOW_ACTION_END`s fire together afterward.
+ *
+ * Read naively, each subsequent BEGIN in the burst looks exactly like real
+ * recursion — it's still-open and the same event name, same as a genuine
+ * nested/recursive call would be. `TreeBuilder` treats consecutive identical
+ * entries as siblings instead of nesting them only for events listed here,
+ * *not* generally, because the same shape (same event, nothing nested yet)
+ * is also exactly what real recursion looks like at its very first level —
+ * e.g. a recursive Apex method or a recursive flow interview genuinely
+ * should nest. Only add an event here once a real log has shown it bursts;
+ * getting this wrong for the wrong event silently flattens real recursion.
+ */
+export const BURST_ENTRY_EVENTS: Set<string> = new Set(['WF_FLOW_ACTION_BEGIN']);
 
 /** Multi-line governor-limit blocks whose body follows on untimestamped lines. */
 export const LIMIT_BLOCK_STARTS: Set<string> = new Set([
@@ -295,6 +321,10 @@ export function eventCategory(event: string): NodeType {
   if (event.startsWith('XDS_')) return 'CALLOUT';
   if (event.startsWith('PUSH_NOTIFICATION') || event.startsWith('EMAIL_')) return 'SYSTEM';
   if (event.startsWith('SYSTEM')) return 'SYSTEM';
+  // Data Access (row/field-level access policy evaluation) — a newer, low-
+  // volume category with no dedicated NodeType of its own yet; folded into
+  // SYSTEM rather than growing eventColors.ts/TYPE_ICON for four events.
+  if (event.startsWith('POLICY_RULE_') || event === 'DATA_ACCESS_EVALUATION') return 'SYSTEM';
   return 'GENERIC';
 }
 
@@ -335,4 +365,86 @@ export function isUnrecognizedEvent(event: string): boolean {
   if (BLOCK_EVENTS.has(event) || KNOWN_UNCATEGORIZED.has(event)) return false;
   if (event in ENTRY_EVENTS || EXIT_EVENTS.has(event)) return false;
   return eventCategory(event) === 'GENERIC';
+}
+
+/**
+ * Declarative "fold these events into one row" groups — the shape
+ * `TreeBuilder`'s validation-folding hand-wrote before this existed. Salesforce
+ * reports one logical thing (a validation rule, and likely other multi-event
+ * bursts we haven't hit yet) as several separate timestamped events; a group
+ * says "this event opens a held row, these events extend a field on it,
+ * these events close it and record a result," so the *next* pattern like this
+ * is a new entry here instead of a new method in parser.ts.
+ *
+ * This only generalizes the shape validation-folding already needed — it does
+ * not (and can't) discover on its own which events *should* be grouped. That
+ * still takes a human noticing the pattern in a real log, same as validation-
+ * folding itself was noticed.
+ */
+export interface EventGroupSpec {
+  key: string;
+  /** Every event under this prefix belongs to the family, even ones that are
+   *  neither the opener, an extender, nor a closer (e.g. VALIDATION_ERROR) —
+   *  they still render with the group's type instead of falling to GENERIC. */
+  familyPrefix: string;
+  type: 'VALIDATION';
+  /** Event that opens a new held row. */
+  opens: string;
+  /** Events that extend a field on the held row instead of starting their own row. */
+  extends?: Record<string, { field: 'detail'; continuation?: boolean }>;
+  /** Events that close the held row, writing a value to a field, then clear it. */
+  closes?: Record<string, { field: 'validationResult'; value: 'PASS' | 'FAIL' }>;
+}
+
+export const EVENT_GROUPS: EventGroupSpec[] = [
+  {
+    key: 'VALIDATION',
+    familyPrefix: 'VALIDATION_',
+    type: 'VALIDATION',
+    opens: 'VALIDATION_RULE',
+    extends: { VALIDATION_FORMULA: { field: 'detail', continuation: true } },
+    closes: {
+      VALIDATION_PASS: { field: 'validationResult', value: 'PASS' },
+      VALIDATION_FAIL: { field: 'validationResult', value: 'FAIL' },
+    },
+  },
+];
+
+const GROUP_BY_OPEN = new Map(EVENT_GROUPS.map((g) => [g.opens, g] as const));
+const GROUP_BY_EXTEND = new Map<
+  string,
+  { group: EventGroupSpec; field: 'detail'; continuation?: boolean }
+>();
+const GROUP_BY_CLOSE = new Map<
+  string,
+  { group: EventGroupSpec; field: 'validationResult'; value: 'PASS' | 'FAIL' }
+>();
+for (const group of EVENT_GROUPS) {
+  for (const [event, spec] of Object.entries(group.extends ?? {})) {
+    GROUP_BY_EXTEND.set(event, { group, ...spec });
+  }
+  for (const [event, spec] of Object.entries(group.closes ?? {})) {
+    GROUP_BY_CLOSE.set(event, { group, ...spec });
+  }
+}
+
+/** Which group (if any) this event's family belongs to — including events that are neither opener, extender, nor closer. */
+export function groupForEvent(event: string): EventGroupSpec | null {
+  return EVENT_GROUPS.find((g) => event.startsWith(g.familyPrefix)) ?? null;
+}
+
+export function groupOpen(event: string): EventGroupSpec | null {
+  return GROUP_BY_OPEN.get(event) ?? null;
+}
+
+export function groupExtend(
+  event: string,
+): { group: EventGroupSpec; field: 'detail'; continuation?: boolean } | null {
+  return GROUP_BY_EXTEND.get(event) ?? null;
+}
+
+export function groupClose(
+  event: string,
+): { group: EventGroupSpec; field: 'validationResult'; value: 'PASS' | 'FAIL' } | null {
+  return GROUP_BY_CLOSE.get(event) ?? null;
 }

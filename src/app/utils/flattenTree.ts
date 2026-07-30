@@ -20,6 +20,12 @@ export interface FlatTreeNode {
   totSoql: number;
   totDml: number;
   totRows: number;
+  /**
+   * PASS/FAIL for a validation-rule row, shown inline. Previously only reachable
+   * by opening the detail panel, which does not scale — a log with 51 rules
+   * meant 51 clicks to see which failed.
+   */
+  validationResult?: 'PASS' | 'FAIL';
 }
 
 interface FlattenOptions {
@@ -118,6 +124,7 @@ export function flattenExecutionTree(
       totSoql: 0,
       totDml: 0,
       totRows: 0,
+      ...(node.validationResult ? { validationResult: node.validationResult } : {}),
     });
   }
 

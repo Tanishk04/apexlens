@@ -10,6 +10,11 @@ ever leaves the browser. Optional AI diagnosis is bring-your-own-key and fully o
 
 ## Features
 
+- **Entry point at a glance** — the Setup ▸ Debug Logs list gains Type / Class / Method columns
+  naming the Apex class, trigger, flow or page behind each log, so you don't have to open logs to
+  find the one you want. Each row is identified by reading the first few hundred bytes of its log,
+  never the whole thing; results are cached, and the feature can be turned off or set to
+  click-to-resolve in Settings. On metered or 2G/3G connections it pauses itself.
 - **Execution Tree** — collapsible call tree, multi-type filtering, jump straight to the raw log
   line behind any row.
 - **Execution Timeline** — canvas flame chart with bounded pan/zoom and a minimap.
@@ -26,7 +31,13 @@ ever leaves the browser. Optional AI diagnosis is bring-your-own-key and fully o
 ## Install
 
 - **Chrome Web Store**: pending review — link will be added here once published.
+- **From a release**: download `apexlens-<version>.zip` from
+  [Releases](https://github.com/Tanishk04/apexlens/releases), unzip it, then load it unpacked
+  (`chrome://extensions` → Developer mode → Load unpacked). Each release zip is the exact artifact
+  CI built from that tag.
 - **From source**: see [Development](#development) below.
+
+Releases are cut by pushing a `v*` tag — see [RELEASING.md](RELEASING.md).
 
 ## Stack
 

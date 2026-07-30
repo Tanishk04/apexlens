@@ -94,6 +94,17 @@ export const DetailPanel = ({ selected, exception, onClose, onJumpToLine }: Prop
           {node ? node.soql || node.name : stmt!.text}
         </div>
 
+        {stmt?.detail ? (
+          <div className="mt-2">
+            <div className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+              Formula
+            </div>
+            <div className="whitespace-pre-wrap break-words rounded-md border border-border bg-background p-2.5 font-mono text-xs text-muted-foreground">
+              {stmt.detail.trim()}
+            </div>
+          </div>
+        ) : null}
+
         {exception && exception.stackTrace.length > 0 ? (
           <div className="mt-2 whitespace-pre-wrap break-words rounded-md border border-error/30 bg-error/10 p-2.5 font-mono text-xs text-error/80">
             {exception.stackTrace.join('\n')}

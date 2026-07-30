@@ -75,6 +75,13 @@ describe('content script observer self-mutation guard', () => {
     expect(isSelfMutation([record([el('sfda-analyze-btn'), el('sfda-analyze-btn')])])).toBe(true);
   });
 
+  it('also ignores the entry-point cells we inject', () => {
+    // The Type/Class/Method cells go into the same observed tree as the buttons,
+    // so they need the same guard or they reintroduce the feedback loop.
+    expect(isSelfMutation([record([el('sfda-entry-cell')])])).toBe(true);
+    expect(isSelfMutation([record([el('sfda-analyze-btn'), el('sfda-entry-cell')])])).toBe(true);
+  });
+
   it('does not ignore real page mutations', () => {
     expect(isSelfMutation([record([el('slds-table-row')])])).toBe(false);
     expect(isSelfMutation([record([el('sfda-analyze-btn')]), record([el()])])).toBe(false);

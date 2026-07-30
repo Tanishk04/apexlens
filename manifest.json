@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ApexLens",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "ApexLens — AI-assisted Salesforce Apex debug log analysis.",
   "icons": {
     "16": "icons/icon16.png",
@@ -17,8 +17,10 @@
       "128": "icons/icon128.png"
     }
   },
+  "incognito": "split",
   "permissions": [
-    "cookies"
+    "cookies",
+    "storage"
   ],
   "host_permissions": [
     "https://*.salesforce.com/*",
@@ -27,6 +29,10 @@
     "https://openrouter.ai/*",
     "http://localhost/*"
   ],
+  "options_ui": {
+    "page": "src/options/index.html",
+    "open_in_tab": true
+  },
   "background": {
     "service_worker": "src/background/index.ts",
     "type": "module"

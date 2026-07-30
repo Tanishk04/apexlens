@@ -54,8 +54,20 @@ export function formatEventLabel(event: string, payload: string): string {
       return payload || event;
     }
     case 'FLOW_START_INTERVIEW_BEGIN':
-    case 'FLOW_CREATE_INTERVIEW_BEGIN':
       return parts[parts.length - 1] || payload || event;
+    case 'FLOW_CREATE_INTERVIEW_BEGIN':
+      // Payload is bare internal IDs (org/flow-version/flow-definition) — no
+      // name field exists in this event at all, unlike FLOW_START_INTERVIEW_BEGIN
+      // just above. The default last-field formatter surfaced one of those IDs
+      // as if it were a name (reported from a real log as an Execution Tree row
+      // and an Execution Analysis row both literally named a raw 18-char ID).
+      // There is nothing to extract, so label what the event is instead.
+      return 'Create Interview';
+    case 'FLOW_START_INTERVIEWS_BEGIN':
+      // Payload is a bare interview *count* (e.g. "1", "6"), not a name —
+      // reported from a real log as rows literally named "1". The count is
+      // genuinely useful, so it's kept, just labelled as what it counts.
+      return parts[0] ? `Start Interviews (${parts[0]})` : 'Start Interviews';
     case 'FLOW_ELEMENT_BEGIN':
     case 'FLOW_BULK_ELEMENT_BEGIN':
       // [..]|<elementType>|<elementName>
@@ -65,6 +77,18 @@ export function formatEventLabel(event: string, payload: string): string {
       return parts[parts.length - 1] || payload || event;
     case 'VALIDATION_FORMULA':
       return parts[0] || payload || event;
+    case 'WF_CRITERIA_BEGIN':
+      // [object desc]|<rule name>|<rule id>|<criteria type>|<eval order>
+      // The default (last-field) formatter was showing the eval order — always
+      // a small integer, "0" in every log seen — instead of the rule name.
+      return (parts.length >= 5 ? parts[1] : parts[parts.length - 1]) || payload || event;
+    case 'WF_FLOW_ACTION_BEGIN':
+      // Payload is a bare flow-action id with no name field at all — unlike
+      // most WF_* events there is nothing else to extract. Label it rather than
+      // show a meaningless id on its own, but keep the id: several distinct flow
+      // actions in one log otherwise collapse into a single indistinguishable
+      // "Flow Action" group in the Analysis tables.
+      return parts[0] ? `Flow Action ${parts[0]}` : payload || event;
     case 'USER_DEBUG':
       // Payload is LEVEL|message — the Lexer already captured the `[line]` token
       // into LogToken.lineNumber, so it is NOT part of `payload` here. Keeping

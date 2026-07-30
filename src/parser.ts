@@ -21,6 +21,12 @@ import {
   eventCategory,
   EXIT_TO_ENTRY,
   LIMIT_BLOCK_STARTS,
+  BURST_ENTRY_EVENTS,
+  groupForEvent,
+  groupOpen,
+  groupExtend,
+  groupClose,
+  type EventGroupSpec,
 } from './events';
 
 const MAX_CONTINUATION = 5000; // guard against pathological multi-line payloads
@@ -100,6 +106,12 @@ export class TreeBuilder {
   private exceptions: LogException[] = [];
   private lastStatement: StatementEvent | null = null;
   private lastException: LogException | null = null;
+  /** Held row per open `EventGroupSpec.key` (e.g. an open validation rule awaiting its formula and PASS/FAIL). */
+  private openGroupRows: Record<string, StatementEvent | null> = {};
+  /** Parent to attach the next sibling of an in-progress `BURST_ENTRY_EVENTS` run to (see `events.ts`). */
+  private burst: { event: string; parent: ExecutionNode } | null = null;
+  /** Which field of `lastStatement` untimestamped lines extend. */
+  private continuationField: 'text' | 'detail' = 'text';
 
   public firstTs = -1;
   public lastTs = 0;
@@ -137,7 +149,22 @@ export class TreeBuilder {
 
     if (isEntryEvent(event)) {
       const node = this.createNode(token);
-      this.top().children.push(node);
+      const top = this.top();
+      // See BURST_ENTRY_EVENTS in events.ts: a handful of events fire as a
+      // same-name burst (several BEGINs before any END) rather than nesting
+      // one inside the next. The signature — top of stack is the same event
+      // and hasn't logged any real work yet — is indistinguishable from
+      // genuine first-level recursion by shape alone, so it's only applied
+      // to events confirmed to actually burst, never generally.
+      let parent = top;
+      if (BURST_ENTRY_EVENTS.has(event) && top.event === event && top.children.length === 0) {
+        parent = this.burst && this.burst.event === event ? this.burst.parent : (this.stack[this.stack.length - 2] ?? top);
+        this.burst = { event, parent };
+      } else {
+        this.burst = null;
+      }
+      node.parentId = parent.id;
+      parent.children.push(node);
       this.stack.push(node);
       this.lastStatement = null;
       if (event === 'SOQL_EXECUTE_BEGIN') this.counters.soql++;
@@ -198,10 +225,9 @@ export class TreeBuilder {
       return;
     }
 
-    if (event.startsWith('VALIDATION_')) {
-      const stmt = this.pushStatement(token, 'VALIDATION');
-      if (event === 'VALIDATION_PASS') stmt.validationResult = 'PASS';
-      else if (event === 'VALIDATION_FAIL') stmt.validationResult = 'FAIL';
+    const group = groupForEvent(event);
+    if (group) {
+      this.handleGroup(token, group);
       return;
     }
 
@@ -255,8 +281,65 @@ export class TreeBuilder {
 
     if (this.stack.length <= 1) return null;
     const node = this.stack.pop()!;
-    node.durationNs = timestampNs - node.timestamp;
+    // Clamped the same way the orphan/force-close path above already is: a
+    // clock jump backwards between a node's entry and its own exit (rare, but
+    // real logs do it) must not turn into a negative duration that silently
+    // blanks the Total column instead of just reading as (near-)zero.
+    node.durationNs = Math.max(0, timestampNs - node.timestamp);
     return node;
+  }
+
+  /**
+   * Fold a group's events into one row, per its `EventGroupSpec` (see
+   * `events.ts`). Originally hand-written just for validation rules —
+   * Salesforce reports each rule as VALIDATION_RULE, then VALIDATION_FORMULA,
+   * then VALIDATION_PASS/FAIL, so 51 rules became 153 tree rows, two thirds of
+   * which carried no name and could not be read on their own. Generalized so
+   * the next multi-event burst Salesforce turns out to have is a new
+   * `EVENT_GROUPS` entry, not a new method here.
+   */
+  private handleGroup(token: LogToken, group: EventGroupSpec): void {
+    const { event } = token;
+
+    if (groupOpen(event)) {
+      this.openGroupRows[group.key] = this.pushStatement(token, group.type);
+      return;
+    }
+
+    const extend = groupExtend(event);
+    if (extend) {
+      const row = this.openGroupRows[group.key];
+      if (!row) {
+        this.pushStatement(token, group.type);
+        return;
+      }
+      row.detail = token.payload;
+      // The extended body (e.g. a validation formula) arrives on the
+      // untimestamped lines that follow, so aim continuations at that field
+      // rather than at the row's name.
+      if (extend.continuation) {
+        this.lastStatement = row;
+        this.continuationField = extend.field;
+      }
+      return;
+    }
+
+    const close = groupClose(event);
+    if (close) {
+      const row = this.openGroupRows[group.key];
+      if (row) {
+        row.validationResult = close.value;
+        this.openGroupRows[group.key] = null;
+        this.lastStatement = null;
+        return;
+      }
+      this.pushStatement(token, group.type).validationResult = close.value;
+      return;
+    }
+
+    // Family member that's neither opener, extender, nor closer (e.g.
+    // VALIDATION_ERROR) stands on its own.
+    this.pushStatement(token, group.type);
   }
 
   /** Append an untimestamped continuation line (multi-line debug or stack trace). */
@@ -265,7 +348,14 @@ export class TreeBuilder {
       const trimmed = line.trim();
       if (trimmed) this.lastException.stackTrace.push(trimmed);
     }
-    if (this.lastStatement && this.lastStatement.text.length < MAX_CONTINUATION) {
+    if (!this.lastStatement) return;
+
+    if (this.continuationField === 'detail') {
+      const current = this.lastStatement.detail ?? '';
+      if (current.length < MAX_CONTINUATION) this.lastStatement.detail = current + '\n' + line;
+      return;
+    }
+    if (this.lastStatement.text.length < MAX_CONTINUATION) {
       this.lastStatement.text += '\n' + line;
     }
   }
@@ -289,6 +379,7 @@ export class TreeBuilder {
     this.top().children.push(stmt);
     this.lastStatement = stmt;
     this.lastException = null;
+    this.continuationField = 'text';
     return stmt;
   }
 
@@ -324,13 +415,24 @@ export class TreeBuilder {
       if (rows) node.dmlRows = parseInt(rows, 10);
     } else if (event === 'FLOW_ELEMENT_BEGIN' || event === 'FLOW_BULK_ELEMENT_BEGIN') {
       const parts = payload.split('|').filter(Boolean);
+      // Inherit the enclosing flow's name from whatever this element nests
+      // under: the interview itself (whose own flowDetails.flowName is blank,
+      // so this falls back to its .name — the interview's name), or, for an
+      // element nested inside another element, that element's already-
+      // inherited flowName. Previously hardcoded to '', so Flow Analysis could
+      // never say which flow an element belonged to.
+      const parent = this.top();
+      const flowName = parent.flowDetails?.flowName || parent.name;
       node.flowDetails = {
-        flowName: '',
+        flowName,
         elementType: parts[parts.length - 2] ?? '',
         elementName: parts[parts.length - 1] ?? '',
       };
     } else if (event === 'FLOW_START_INTERVIEW_BEGIN' || event === 'FLOW_CREATE_INTERVIEW_BEGIN') {
-      node.flowDetails = { flowName: node.name, elementType: 'Interview', elementName: node.name };
+      // flowName intentionally blank: this node IS the flow, so attributing it
+      // to itself just duplicated the same string into both the Flow and
+      // Element columns of the Flow Analysis table.
+      node.flowDetails = { flowName: '', elementType: 'Interview', elementName: node.name };
     }
 
     return node;
@@ -564,18 +666,37 @@ export class SalesforceLogParser {
     }
   }
 
+  /**
+   * Record one "Name: used out of allowed" line from a governor-limit block.
+   *
+   * Salesforce writes a full CUMULATIVE_LIMIT_USAGE snapshot per code unit —
+   * this reference log has 17 for the default namespace alone — so the same 13
+   * metric names recur repeatedly (17 x 13 = 221 rows for 13 real metrics).
+   * The values are cumulative and non-decreasing across those snapshots (traced
+   * end to end: SOQL queries 0,0,0,0,10,…,30; CPU time 0,190,…,1224), so rather
+   * than collecting every snapshot this keeps one entry per name, updated to the
+   * higher figure whenever a later block reports one. If a future log ever
+   * reports a lower figure it is highest-so-far, not "final" — the safer of the
+   * two given the values observed always climb.
+   */
   private tryLimitLine(line: string): boolean {
     const m = line.match(/^\s*(.+?):\s*([\d,]+)\s+out of\s+([\d,]+)/);
     if (!m || this.currentBlock?.kind !== 'limits') return false;
     const used = parseInt(m[2]!.replace(/,/g, ''), 10);
     const allowed = parseInt(m[3]!.replace(/,/g, ''), 10);
-    const metric: LimitMetric = {
-      name: m[1]!.trim(),
-      used,
-      allowed,
-      percentage: allowed > 0 ? used / allowed : 0,
-    };
-    this.limits[this.currentBlock.ns]!.push(metric);
+    const name = m[1]!.trim();
+
+    const list = this.limits[this.currentBlock.ns]!;
+    const existing = list.find((l) => l.name === name);
+    if (existing) {
+      if (used > existing.used) {
+        existing.used = used;
+        existing.allowed = allowed;
+        existing.percentage = allowed > 0 ? used / allowed : 0;
+      }
+    } else {
+      list.push({ name, used, allowed, percentage: allowed > 0 ? used / allowed : 0 });
+    }
     return true;
   }
 

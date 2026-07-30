@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, ChevronsDownUp, ChevronsUpDown, X } from 'lucide-react';
+import { Search, ChevronsDownUp, ChevronsUpDown, X, Info } from 'lucide-react';
 import { eventColorFor } from '../theme/eventColors';
 
 interface FilterBarProps {
@@ -74,6 +74,44 @@ export const FilterBar = ({
         >
           <ChevronsDownUp size={14} />
         </button>
+        {/*
+          Every badge below already carries its own explanation as a hover
+          title, but a new user has no reason to hover one to discover that —
+          this is the one place to look for "what do these mean" up front.
+          A native <details>/<summary> disclosure needs no click-outside or
+          open-state wiring for something this lightweight.
+        */}
+        <details className="relative shrink-0">
+          <summary
+            title="What do these mean?"
+            className="flex list-none items-center rounded-md border border-border p-1.5 text-muted-foreground marker:content-none hover:bg-accent hover:text-foreground [&::-webkit-details-marker]:hidden"
+          >
+            <Info size={14} />
+          </summary>
+          <div className="absolute right-0 z-20 mt-1 w-80 max-h-80 overflow-y-auto rounded-md border border-border bg-card p-2 text-xs shadow-lg">
+            {/*
+              A fixed-width first column (not each badge sized to its own
+              text) so every description starts at the same x position —
+              without it, FLOW's short badge and CODE_UNIT's long one left
+              the description column ragged and unreadable as a list.
+            */}
+            <div className="grid grid-cols-[76px_1fr] items-start gap-x-2 gap-y-2">
+              {availableTypes.map((type) => {
+                const entry = eventColorFor(type);
+                return (
+                  <React.Fragment key={type}>
+                    <span
+                      className={`rounded px-1.5 py-0.5 text-center text-[10px] font-semibold uppercase tracking-wide ${entry.badgeClass}`}
+                    >
+                      {type}
+                    </span>
+                    <span className="text-muted-foreground">{entry.description}</span>
+                  </React.Fragment>
+                );
+              })}
+            </div>
+          </div>
+        </details>
       </div>
 
       <div className="flex flex-wrap items-center gap-1">
@@ -82,6 +120,7 @@ export const FilterBar = ({
             key={type}
             type="button"
             onClick={() => onToggleType(type)}
+            title={eventColorFor(type).description}
             className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide transition-colors ${chipClass(
               type,
               activeTypes.has(type),

@@ -85,16 +85,62 @@ Trigger.T: line 3, column 1`);
 });
 
 describe('SalesforceLogParser — non-Apex categories', () => {
-  it('parses a validation-only log with pass/fail (no method events)', () => {
+  /**
+   * Salesforce reports one rule as three events. They describe a single thing,
+   * so they collapse to a single row — otherwise a log with 51 rules (as in the
+   * reference workflow log) produced 153 rows, two thirds of them unnamed and
+   * meaningless on their own.
+   */
+  it('folds a validation rule, its formula and its result into one row', () => {
     const r = parse(`14:00:00.0 (100)|VALIDATION_RULE|03d3t000000UtwD|Blank_Lead_Created_Date
 14:00:00.0 (200)|VALIDATION_FORMULA|AND(ISNEW(), ISBLANK( Lead_Created_Date__c ))|Lead_Created_Date__c=null
 14:00:00.0 (300)|VALIDATION_FAIL`);
 
     const stmts = r.executionTree!.children as StatementEvent[];
-    expect(stmts.length).toBe(3);
-    expect(stmts.every((s) => s.type === 'VALIDATION')).toBe(true);
-    expect(stmts[2]!.validationResult).toBe('FAIL');
+    expect(stmts.length).toBe(1);
+    expect(stmts[0]!.type).toBe('VALIDATION');
+    expect(stmts[0]!.text).toBe('Blank_Lead_Created_Date');
+    expect(stmts[0]!.validationResult).toBe('FAIL');
+    // The formula rides along for the detail panel rather than as its own row.
+    expect(stmts[0]!.detail).toContain('ISBLANK');
     expect(r.exceptions.length).toBe(0);
+  });
+
+  it('groups each rule separately when several run in a row', () => {
+    const r = parse(`14:00:00.0 (100)|VALIDATION_RULE|03d1|First_Rule
+14:00:00.0 (110)|VALIDATION_FORMULA|AND(
+14:00:00.0 (120)|VALIDATION_PASS
+14:00:00.0 (200)|VALIDATION_RULE|03d2|Second_Rule
+14:00:00.0 (210)|VALIDATION_FORMULA|ISBLANK(X)
+14:00:00.0 (220)|VALIDATION_FAIL`);
+
+    const stmts = r.executionTree!.children as StatementEvent[];
+    expect(stmts.map((s) => s.text)).toEqual(['First_Rule', 'Second_Rule']);
+    expect(stmts.map((s) => s.validationResult)).toEqual(['PASS', 'FAIL']);
+  });
+
+  it('captures a multi-line formula into detail, not into the row name', () => {
+    // Real formulas span untimestamped lines — 885 of them in the reference log.
+    // Those must not end up appended to the rule's name.
+    const r = parse(`14:00:00.0 (100)|VALIDATION_RULE|03d1|Cases_Priority_Validation
+14:00:00.0 (110)|VALIDATION_FORMULA|AND(
+GE_SM_HQ_Forced_Outage__c = TRUE,
+NOT(ISPICKVAL(Priority, "High"))
+)
+14:00:00.0 (120)|VALIDATION_PASS`);
+
+    const stmt = (r.executionTree!.children as StatementEvent[])[0]!;
+    expect(stmt.text).toBe('Cases_Priority_Validation');
+    expect(stmt.detail).toContain('GE_SM_HQ_Forced_Outage__c');
+    expect(stmt.detail).toContain('ISPICKVAL');
+    expect(stmt.validationResult).toBe('PASS');
+  });
+
+  it('still records a result that arrives without a preceding rule', () => {
+    const r = parse('14:00:00.0 (100)|VALIDATION_FAIL');
+    const stmts = r.executionTree!.children as StatementEvent[];
+    expect(stmts).toHaveLength(1);
+    expect(stmts[0]!.validationResult).toBe('FAIL');
   });
 });
 
@@ -115,6 +161,30 @@ describe('SalesforceLogParser — governor limits', () => {
     expect(cpu.used).toBe(120);
     expect(cpu.allowed).toBe(10000);
     expect(r.metrics.cpuTimeMs).toBe(120);
+  });
+
+  /**
+   * Salesforce writes a full snapshot per code unit — 17 blocks for one
+   * namespace in a real workflow log, 221 rows for 13 real metrics — and the
+   * values only ever climb across them. Repeated blocks must collapse to one
+   * entry per name holding the highest figure, not accumulate.
+   */
+  it('collapses repeated snapshots of the same namespace into one metric per name', () => {
+    const block = (soql: number, cpu: number) => `14:00:00.0 (100)|CUMULATIVE_LIMIT_USAGE
+14:00:00.0 (100)|LIMIT_USAGE_FOR_NS|(default)|
+  Number of SOQL queries: ${soql} out of 100
+  Maximum CPU time: ${cpu} out of 10000
+14:00:00.0 (100)|CUMULATIVE_LIMIT_USAGE_END
+`;
+    const r = parse(block(0, 190) + block(10, 491) + block(19, 649) + block(30, 1224));
+
+    const def = r.governorLimits!.namespaces['default']!;
+    expect(def).toHaveLength(2); // not 4 blocks x 2 metrics = 8
+    const soqlNames = def.filter((l) => /SOQL/i.test(l.name));
+    expect(soqlNames).toHaveLength(1);
+    expect(soqlNames[0]!.used).toBe(30); // the highest reported, not the first
+    const cpu = def.find((l) => /CPU/i.test(l.name))!;
+    expect(cpu.used).toBe(1224);
   });
 });
 
@@ -270,6 +340,14 @@ ${extraLine}
   it.each([
     ['SLA_END', '14:00:00.0 (3000)|SLA_END|[3]|x'],
     ['WF_ACTIONS_END', '14:00:00.0 (3000)|WF_ACTIONS_END|[3]|x'],
+    // Observed 13 times, unpaired, in a real workflow log — it fires *after*
+    // FLOW_START_INTERVIEW_END has already closed the interview. It is absent
+    // from Salesforce's published catalog, which is why it was briefly dropped
+    // from POINT_EVENTS; the log, not the docs, settled it.
+    [
+      'FLOW_INTERVIEW_FINISHED',
+      '14:00:00.0 (3000)|FLOW_INTERVIEW_FINISHED|2508b579|Case_Update_Pilot_From_Owner',
+    ],
   ])('a stray %s closes nothing it did not open', (_name, line) => {
     const codeUnit = parse(siblingMethods(line)).executionTree!.children[0] as ExecutionNode;
     const methods = codeUnit.children.filter((c) => isNode(c) && c.type === 'METHOD');
@@ -303,5 +381,48 @@ ${extraLine}
     expect(outer.event).toBe('ZZZ_THING_BEGIN');
     expect(outer.durationNs).toBe(3000);
     expect(outer.children.filter(isNode)).toHaveLength(1);
+  });
+
+  /**
+   * Real workflow logs show Salesforce logging a bulk workflow action as
+   * several identical WF_FLOW_ACTION_BEGINs back-to-back (one per record in
+   * the batch) with nothing between them, followed later by an equal-count
+   * burst of WF_FLOW_ACTION_ENDs — not one BEGIN/END pair per invocation.
+   * Read naively this nests 6 levels deep; they're 6 parallel siblings.
+   */
+  it('renders a WF_FLOW_ACTION_BEGIN burst as siblings, not 6 levels of nesting', () => {
+    const r = parse(`14:00:00.0 (1000)|CODE_UNIT_STARTED|[EXTERNAL]|01p000000000000|Workflow
+14:00:00.0 (2000)|WF_FLOW_ACTION_BEGIN|09LfC0000003PI3
+14:00:00.0 (3000)|WF_FLOW_ACTION_BEGIN|09LfC0000003PI3
+14:00:00.0 (4000)|WF_FLOW_ACTION_BEGIN|09LfC0000003PI3
+14:00:00.0 (100000)|WF_FLOW_ACTION_END|09LfC0000003PI3
+14:00:00.0 (101000)|WF_FLOW_ACTION_END|09LfC0000003PI3
+14:00:00.0 (102000)|WF_FLOW_ACTION_END|09LfC0000003PI3
+14:00:00.0 (103000)|CODE_UNIT_FINISHED|Workflow`);
+
+    const workflow = r.executionTree!.children[0] as ExecutionNode;
+    const actions = workflow.children.filter(isNode);
+    expect(actions).toHaveLength(3);
+    expect(actions.every((a) => a.type === 'WORKFLOW')).toBe(true);
+    // None nested under another — every one is a direct child of Workflow,
+    // and none of them has one of its siblings as a child.
+    expect(actions.every((a) => a.children.filter(isNode).length === 0)).toBe(true);
+  });
+
+  it('still nests a real recursive call of the same event with work done first', () => {
+    // Contrast with the burst above: here the outer call does real work
+    // (a SOQL query) before the "recursive" entry, so it's genuine nesting,
+    // not an artifact burst — must stay nested, not get flattened.
+    const r = parse(`14:00:00.0 (1000)|METHOD_ENTRY|[1]|A.recurse()
+14:00:00.0 (2000)|SOQL_EXECUTE_BEGIN|[2]|Aggregations:0|SELECT Id FROM Account
+14:00:00.0 (3000)|SOQL_EXECUTE_END|[2]|Rows:1
+14:00:00.0 (4000)|METHOD_ENTRY|[1]|A.recurse()
+14:00:00.0 (5000)|METHOD_EXIT|[1]|A.recurse()
+14:00:00.0 (6000)|METHOD_EXIT|[1]|A.recurse()`);
+
+    const outer = r.executionTree!.children[0] as ExecutionNode;
+    const inner = outer.children.filter((c) => isNode(c) && c.type === 'METHOD') as ExecutionNode[];
+    expect(inner).toHaveLength(1);
+    expect(inner[0]!.name).toBe('A.recurse()');
   });
 });

@@ -1,19 +1,19 @@
 import React from 'react';
-import { FolderOpen, Sun, Moon } from 'lucide-react';
+import { FolderOpen, Sun, Moon, Settings, Command } from 'lucide-react';
 import type { LogMetrics } from '../../types';
 import { shortcutLabel } from '../utils/platform';
 
-/** ApexLens mark: magnifying-glass lens + handle + "A". See branding/ApexLens/SVG/mark-simple.svg. */
+/**
+ * ApexLens mark: a two-element "peak + dot" shape — matches
+ * branding/ApexLens/SVG/mark-transparent.svg exactly. This previously hand-drew
+ * an unrelated "magnifying glass + A" design that appeared nowhere else in the
+ * repo's branding assets and cited a `mark-simple.svg` that doesn't exist.
+ */
 const ApexLensMark = () => (
   <svg viewBox="0 0 512 512" width="16" height="16" aria-hidden="true">
-    <circle cx="210" cy="210" r="113" fill="#FFFFFF" />
-    <path d="M 80 210 A 130 130 0 0 1 340 210" stroke="#60A5FA" strokeWidth="34" fill="none" />
-    <path d="M 340 210 A 130 130 0 0 1 80 210" stroke="#1D4ED8" strokeWidth="34" fill="none" />
-    <path d="M 312 312 L 432 432" stroke="#3B82F6" strokeWidth="46" strokeLinecap="round" fill="none" />
-    <g strokeLinecap="round" strokeLinejoin="round" fill="none">
-      <path d="M 150 290 L 210 140" stroke="#0F172A" strokeWidth="22" />
-      <path d="M 210 140 L 270 290" stroke="#3B82F6" strokeWidth="22" />
-      <path d="M 178 240 L 242 240" stroke="#2563EB" strokeWidth="20" />
+    <g fill="none" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M 92 418 L 256 130 L 420 418" stroke="#2563EB" strokeWidth="66" />
+      <circle cx="256" cy="130" r="42" fill="#3B82F6" stroke="none" />
     </g>
   </svg>
 );
@@ -33,6 +33,7 @@ interface Props {
   onOpenFile: (file: File) => void;
   onOpenPalette: () => void;
   onIssuesClick: () => void;
+  onOpenSettings: () => void;
 }
 
 const iconBtn =
@@ -47,6 +48,7 @@ export const AppHeader = ({
   onOpenFile,
   onOpenPalette,
   onIssuesClick,
+  onOpenSettings,
 }: Props) => {
   return (
     <div className="shrink-0 border-b border-border bg-background">
@@ -87,7 +89,15 @@ export const AppHeader = ({
             title={`Command palette (${shortcutLabel('K')})`}
             className={iconBtn}
           >
-            {shortcutLabel('K')}
+            <Command size={13} />
+          </button>
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            title="Settings"
+            className={iconBtn}
+          >
+            <Settings size={13} />
           </button>
         </div>
       </div>

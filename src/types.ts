@@ -53,6 +53,11 @@ export interface StatementEvent {
   /** For VALIDATION_* statements. */
   validationResult?: 'PASS' | 'FAIL';
   /**
+   * Secondary body shown in the detail panel rather than on the row — currently
+   * the formula behind a validation rule, which is long and usually multi-line.
+   */
+  detail?: string;
+  /**
    * Display category from `eventCategory(event)`, when it is more specific than
    * `type`. `type` stays a StatementType (it drives visibility rules); this is
    * what the UI colours and filters by. Absent when the two would agree.

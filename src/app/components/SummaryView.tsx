@@ -25,7 +25,7 @@ export const SummaryView = ({ log, analysis }: Props) => {
 
   return (
     <div className="h-full overflow-auto bg-background">
-      <div className="mx-auto max-w-3xl p-6">
+      <div className="p-6">
         <div className="mb-4 flex items-center justify-end gap-2">
           <button
             type="button"
