@@ -8,6 +8,8 @@ interface TimelineProps {
   onSelect: (id: string) => void;
   /** Current theme; triggers a redraw with the active CSS palette. */
   theme?: string;
+  /** Whether this tab is the one currently visible — see the resync effect below. */
+  active?: boolean;
 }
 
 const ROW_H = 18;
@@ -45,7 +47,7 @@ function fmtNs(ns: number): string {
   return (ns / 1000).toFixed(0) + ' µs';
 }
 
-export const Timeline = ({ root, selectedId, onSelect, theme }: TimelineProps) => {
+export const Timeline = ({ root, selectedId, onSelect, theme, active }: TimelineProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const minimapCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -69,12 +71,25 @@ export const Timeline = ({ root, selectedId, onSelect, theme }: TimelineProps) =
   const size = useRef({ w: 0, h: 0 });
   const hoverId = useRef<string | null>(null);
   const rafRef = useRef(0);
+  /**
+   * True once `fit()` has run against a real (nonzero) container width. Every
+   * tab stays mounted (see App.tsx), so a log can finish loading while this
+   * one sits behind `display:none` — `size.current.w` is 0 then, and
+   * `span / (size.current.w || 1)` falls back to `span / 1`: the whole log
+   * compressed into one pixel of scale, so every rect draws under 1px wide
+   * and disappears into the ruler gridlines. Tracked so the "tab became
+   * visible" effect below knows to redo `fit()` with the now-real width —
+   * but only that once, not every time the tab is revisited, or it would
+   * reset whatever pan/zoom the user had already set.
+   */
+  const fitDone = useRef(false);
 
   const fit = useCallback(() => {
     const span = Math.max(1, layout.t1 - layout.t0);
     const w = size.current.w || 1;
     view.current.startNs = layout.t0;
     view.current.nsPerPx = span / w;
+    fitDone.current = size.current.w > 0;
   }, [layout]);
 
   const draw = useCallback(() => {
@@ -267,6 +282,37 @@ export const Timeline = ({ root, selectedId, onSelect, theme }: TimelineProps) =
     fit();
     scheduleDraw();
   }, [fit, scheduleDraw]);
+
+  // Resync when this tab becomes the visible one.
+  //
+  // Every tab stays mounted (so switching tabs doesn't reset scroll/pan
+  // state — see App.tsx), so a log can finish loading, and the automatic
+  // "refit whenever layout changes" effect above can run, while this panel
+  // sits behind `display:none` — locking in the degenerate zoom described
+  // above `fitDone`. Re-measuring here alone wouldn't fix that: the bad
+  // `view.current` values are already set, and just redrawing with a correct
+  // size still draws the same (wrong) rects. Redoing `fit()` — but only if
+  // it never successfully ran against a real width — is what actually
+  // recovers a sane zoom level the moment the tab is opened, without
+  // clobbering pan/zoom the user set on a previous visit.
+  //
+  // (`ResizeObserver`'s callback fires once on `.observe()` and again on any
+  // later box-size change, and in principle a hidden→visible transition
+  // counts as one of those — but browsers don't reliably flush that
+  // notification until some other event forces a layout pass, so waiting on
+  // it isn't enough either; reading the real size directly here is what
+  // made the canvas blank until an unrelated interaction — e.g. the
+  // wheel-zoom handler, which forces its own redraw and recomputes
+  // `nsPerPx` against whatever size happened to be current by then —
+  // coincided with the fix.)
+  useEffect(() => {
+    if (!active) return;
+    const el = containerRef.current;
+    if (!el) return;
+    size.current = { w: el.clientWidth, h: el.clientHeight };
+    if (!fitDone.current) fit();
+    scheduleDraw();
+  }, [active, fit, scheduleDraw]);
 
   useEffect(() => {
     scheduleDraw();
@@ -504,8 +550,15 @@ export const Timeline = ({ root, selectedId, onSelect, theme }: TimelineProps) =
         )}
         {tip ? (
           <div
-            className="pointer-events-none absolute z-10 max-w-xs rounded-md border border-input bg-card px-2.5 py-1.5 text-xs shadow-lg"
-            style={{ left: tip.left, top: tip.top }}
+            className="pointer-events-none absolute z-10 max-w-xs overflow-y-auto rounded-md border border-input bg-card px-2.5 py-1.5 text-xs shadow-lg"
+            // The overflow-avoidance math below (TIP_H) clamps position against
+            // an assumed height. A long, unbroken frame name (`break-words`,
+            // no line limit) could render far taller than that assumption,
+            // pushing the tooltip past the bottom of the screen instead of
+            // flipping above the cursor. Capping actual height at what the
+            // math already assumes, with internal scroll for the rest, keeps
+            // the two in agreement instead of one silently exceeding the other.
+            style={{ left: tip.left, top: tip.top, maxHeight: TIP_H }}
           >
             <div className="mb-0.5 flex items-center gap-1.5">
               <span

@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronUp, ChevronsDownUp, ChevronsUpDown } from 'lucide-react';
 
 export interface Column<T> {
   key: string;
@@ -99,6 +99,26 @@ export function VirtualTable<T>({
     });
   }
 
+  const canExpand = columns.some((c) => c.grow);
+  function expandAll() {
+    setExpanded(new Set(sorted.map((row, i) => getKey(row, i))));
+  }
+  function collapseAll() {
+    setExpanded(new Set());
+  }
+
+  /**
+   * Fixed width for the Expand All/Collapse All icon group, reused as an
+   * invisible spacer in every body row below. The header and body are two
+   * separate flex rows — sizing this block only in the header (`ml-auto`,
+   * intrinsic width) left the body with strictly more remaining space for
+   * `flex-1`/`grow` columns to absorb than the header had, so every column
+   * boundary drifted between the two. Giving both an identical fixed-width
+   * slot removes the discrepancy structurally instead of trying to keep two
+   * numbers in sync by hand.
+   */
+  const EXPAND_SLOT = 'w-12 shrink-0';
+
   function cellClass(col: Column<T>): string {
     return [
       col.width ?? 'flex-1',
@@ -129,6 +149,26 @@ export function VirtualTable<T>({
             ) : null}
           </button>
         ))}
+        {canExpand ? (
+          <div className={`ml-auto flex items-center justify-end gap-1 normal-case ${EXPAND_SLOT}`}>
+            <button
+              type="button"
+              onClick={expandAll}
+              title="Expand all"
+              className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <ChevronsUpDown size={13} />
+            </button>
+            <button
+              type="button"
+              onClick={collapseAll}
+              title="Collapse all"
+              className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <ChevronsDownUp size={13} />
+            </button>
+          </div>
+        ) : null}
       </div>
 
       {/* per-column filters */}
@@ -149,6 +189,7 @@ export function VirtualTable<T>({
               ) : null}
             </div>
           ))}
+          {canExpand ? <div className={EXPAND_SLOT} /> : null}
         </div>
       ) : null}
 
@@ -201,6 +242,7 @@ export function VirtualTable<T>({
                       </span>
                     </div>
                   ))}
+                  {canExpand ? <div className={EXPAND_SLOT} /> : null}
                 </div>
               );
             })}

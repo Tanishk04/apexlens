@@ -67,7 +67,18 @@ export const LogExplorerView = ({ rawLog, find, onMatches, theme, scrollToLine }
   useEffect(() => {
     if (!scrollToLine) return;
     const index = scrollToLine - 1;
-    if (index >= 0 && index < lines.length) rowVirtualizer.scrollToIndex(index, { align: 'center' });
+    if (index < 0 || index >= lines.length) return;
+    // Jumping here also switches to this tab in the same render (see
+    // `jumpToLine` in App.tsx), so this panel can go from hidden
+    // (display:none, so react-virtual last measured it at zero height) to
+    // visible in this exact commit. Scrolling immediately uses that stale
+    // zero-height measurement and lands the target row half off-screen or
+    // above the fold. One frame is enough for the browser to lay out the
+    // now-visible panel before react-virtual re-measures it.
+    const raf = requestAnimationFrame(() => {
+      rowVirtualizer.scrollToIndex(index, { align: 'center' });
+    });
+    return () => cancelAnimationFrame(raf);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- see note above
   }, [scrollToLine, lines.length]);
 

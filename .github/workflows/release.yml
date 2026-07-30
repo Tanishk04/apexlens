@@ -1,0 +1,74 @@
+name: Release
+
+# Tag-driven: pushing a v* tag builds the extension and publishes a GitHub
+# Release with the installable zip attached. Nothing is published on an ordinary
+# push, so cutting a release is always a deliberate act.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write # required to create the release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # Same four checks as CI. A tag must never ship something main would have
+      # rejected, so they run here too rather than trusting an earlier green run.
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+
+      - name: Check the tag matches the manifest version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          MANIFEST=$(node -p "require('./manifest.json').version")
+          PACKAGE=$(node -p "require('./package.json').version")
+          if [ "$TAG" != "$MANIFEST" ] || [ "$TAG" != "$PACKAGE" ]; then
+            echo "Tag $TAG does not match manifest.json ($MANIFEST) / package.json ($PACKAGE)." >&2
+            echo "Chrome rejects an upload whose manifest version is not greater than the last." >&2
+            exit 1
+          fi
+
+      - name: Package the extension
+        run: |
+          cd dist
+          zip -r "../apexlens-${GITHUB_REF_NAME#v}.zip" .
+
+      - name: Extract this version's changelog section
+        id: notes
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          # Take the lines between this version's heading and the next one.
+          # Matched with index() rather than a regex: the version contains dots
+          # and the heading contains brackets, and escaping those through YAML,
+          # then bash, then awk is a reliable way to end up silently matching
+          # nothing and shipping empty release notes.
+          awk -v hdr="## [$VERSION]" '
+            index($0, hdr) == 1 { found = 1; next }
+            found && index($0, "## [") == 1 { exit }
+            found { print }
+          ' CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "No CHANGELOG.md section found for $VERSION." >&2
+            exit 1
+          fi
+
+      - name: Publish the release
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
+        with:
+          body_path: release-notes.md
+          files: apexlens-*.zip
+          fail_on_unmatched_files: true

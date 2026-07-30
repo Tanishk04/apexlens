@@ -17,6 +17,9 @@ interface Props {
 
 const ROW_H = 24;
 
+/** Shared expand-column box; see the note on VirtualTree's CHEVRON_SLOT. */
+const CHEVRON_SLOT = 'flex h-4 w-4 shrink-0 items-center justify-center';
+
 // Raw view intentionally stays low-key: SYSTEM/GENERIC are muted here rather
 // than the shared table's louder text-system, everything else uses the
 // shared category color as-is.
@@ -136,11 +139,13 @@ export const RawTreeView = ({ lines, find, onMatches, theme }: Props) => {
                   }`}
                 >
                   <div className="shrink-0" style={{ width: `${row.depth * 16 + 8}px` }} />
+                  {/* Both branches share CHEVRON_SLOT so an expandable row and a
+                      leaf at the same depth align exactly — see VirtualTree. */}
                   {row.expandable ? (
                     <button
                       type="button"
                       onClick={() => toggle(row.id)}
-                      className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                      className={`${CHEVRON_SLOT} rounded text-muted-foreground hover:bg-accent hover:text-foreground`}
                       aria-label={collapsed.has(row.id) ? 'Expand' : 'Collapse'}
                     >
                       <ChevronRight
@@ -149,7 +154,7 @@ export const RawTreeView = ({ lines, find, onMatches, theme }: Props) => {
                       />
                     </button>
                   ) : (
-                    <div className="w-[18px] shrink-0" />
+                    <div className={CHEVRON_SLOT} />
                   )}
                   <span className="shrink-0">{highlight(row.event, color, isActive)}</span>
                   {row.lineNumber ? (

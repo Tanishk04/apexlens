@@ -41,7 +41,7 @@ import {
   collectExpandableIds,
 } from './utils/flattenTree';
 import { getSessionId, fetchLogBody, isAllowedSalesforceDomain } from '../api/salesforce';
-import { parseLogInWorker } from './utils/parseInWorker';
+import { parseLogInWorker, isAbortError } from './utils/parseInWorker';
 import { SAMPLE_LOG } from './sampleLog';
 import type { ParsedDebugLog } from '../types';
 import '../index.css';
@@ -67,6 +67,25 @@ const TYPE_ORDER = [
   'SYSTEM',
   'GENERIC',
 ];
+
+/**
+ * Explain a missing session in terms the user can act on.
+ *
+ * Cookies are per-profile, and the old wording — "open Salesforce in another tab
+ * and log in" — was actively wrong for the most common cause: the user *was*
+ * logged in, just in a private window whose cookie jar this page cannot see. Say
+ * which profile we looked in, since that is the fact that resolves it.
+ */
+function sessionNotFoundMessage(): string {
+  const inPrivate =
+    typeof chrome !== 'undefined' && chrome.extension?.inIncognitoContext === true;
+  return inPrivate
+    ? 'No Salesforce session found in this private window. Log in to the org here — a session ' +
+        'in a normal window is a separate profile and cannot be used from Incognito.'
+    : 'No Salesforce session found in this browser profile. Log in to the org in this window, ' +
+        'then retry. If you opened the org in a private window, ApexLens needs "Allow in ' +
+        'Incognito" enabled on chrome://extensions to reach that session.';
+}
 
 const App = () => {
   const [loading, setLoading] = useState(true);
@@ -99,10 +118,35 @@ const App = () => {
     error: null,
   });
 
+  /**
+   * In-flight load, so opening another log supersedes it rather than racing
+   * it — see `parseLogInWorker`. A ref (not state) because superseding must
+   * take effect immediately on the next call, not after a re-render.
+   */
+  const loadAbort = useRef<AbortController | null>(null);
+
+  /**
+   * Supersede any load still running and take ownership of the next one.
+   *
+   * Claimed when the load is *requested*, not when parsing starts. Reading the
+   * file is itself async and scales with its size, so a large log can still be
+   * in `file.text()` while a small one requested later parses and renders
+   * fully — then the large one finally starts, supersedes nothing, and wins.
+   * That is the reported "jumped between logs too fast" symptom exactly:
+   * whichever log was slowest to read ends up on screen, not the one clicked
+   * last.
+   */
+  const beginLoad = useCallback(() => {
+    loadAbort.current?.abort();
+    const controller = new AbortController();
+    loadAbort.current = controller;
+    return controller.signal;
+  }, []);
+
   /** Parse a log body, capture meta, and run error-first navigation. */
-  const ingest = useCallback(async (body: string, name: string) => {
+  const ingest = useCallback(async (body: string, name: string, signal: AbortSignal) => {
     const started = performance.now();
-    const parsed = await parseLogInWorker(body);
+    const parsed = await parseLogInWorker(body, signal);
     setMeta({ name, sizeBytes: body.length, parseMs: performance.now() - started });
     setRawLog(body);
     setParsedLog(parsed);
@@ -123,9 +167,15 @@ const App = () => {
       const domain = params.get('domain');
       const demo = params.get('demo') !== null || (!logId && import.meta.env.DEV);
 
+      // Set only when this load was superseded by a newer one, which then owns
+      // the spinner. Tracked rather than early-returning past the `finally`,
+      // because the other `return`s below (standalone launch, bad domain, no
+      // session) all still need the spinner cleared normally.
+      let superseded = false;
+      const signal = beginLoad();
       try {
         if (demo) {
-          await ingest(SAMPLE_LOG, 'demo-log');
+          await ingest(SAMPLE_LOG, 'demo-log', signal);
         } else if (!logId || !domain) {
           // Standalone launch (toolbar icon): show the landing state.
           return;
@@ -138,20 +188,27 @@ const App = () => {
         } else {
           const sessionId = await getSessionId(domain);
           if (!sessionId) {
-            setError('Session not found. Open Salesforce in another tab and log in, then retry.');
+            setError(sessionNotFoundMessage());
             return;
           }
           const body = await fetchLogBody(domain, sessionId, logId);
-          await ingest(body, logId);
+          if (signal.aborted) {
+            superseded = true;
+            return;
+          }
+          await ingest(body, logId, signal);
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load debug log');
+        // See openLogFile: a superseded parse belongs to whichever call
+        // replaced it, which owns the spinner and any error from here.
+        if (isAbortError(err)) superseded = true;
+        else setError(err instanceof Error ? err.message : 'Failed to load debug log');
       } finally {
-        setLoading(false);
+        if (!superseded) setLoading(false);
       }
     }
     loadLog();
-  }, [ingest]);
+  }, [ingest, beginLoad]);
 
   const nodeIndex = useMemo(() => indexTree(parsedLog?.executionTree ?? null), [parsedLog]);
 
@@ -252,20 +309,34 @@ const App = () => {
   /** Open a local .log file (works in dev and in the extension tab). */
   const openLogFile = useCallback(
     async (file: File) => {
+      const signal = beginLoad();
       setLoading(true);
       setError(null);
       setAi({ loading: false, result: null, error: null });
       setSelectedId(null);
       setCollapsed(new Set());
+      // A superseded load is the user opening another log, not a failure:
+      // reporting it would replace the log they actually want with an error,
+      // and clearing `loading` would stop the spinner while the newer load is
+      // still running. The newer call owns both from here.
+      let superseded = false;
       try {
-        await ingest(await file.text(), file.name);
+        const text = await file.text();
+        // Reading a large file is slow enough that another log can be picked
+        // in the meantime — checked here as well as inside the parse.
+        if (signal.aborted) {
+          superseded = true;
+          return;
+        }
+        await ingest(text, file.name, signal);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to parse log file');
+        if (isAbortError(err)) superseded = true;
+        else setError(err instanceof Error ? err.message : 'Failed to parse log file');
       } finally {
-        setLoading(false);
+        if (!superseded) setLoading(false);
       }
     },
-    [ingest],
+    [ingest, beginLoad],
   );
 
   /** Issues chip: reveal the next exception, cycling through them. */
@@ -447,6 +518,18 @@ const App = () => {
         onOpenFile={openLogFile}
         onOpenPalette={() => setPaletteOpen(true)}
         onIssuesClick={jumpToNextException}
+        onOpenSettings={() => {
+          // This page runs as an extension page (not a content script, which
+          // cannot call this API directly — see the `openOptions` message
+          // handler in background/index.ts), so it can call it directly.
+          if (typeof chrome !== 'undefined' && chrome.runtime?.openOptionsPage) {
+            chrome.runtime.openOptionsPage();
+          } else {
+            // Dev-server / plain-webpage context (no extension APIs) — best
+            // effort so the button still does something during local testing.
+            window.open('/src/options/index.html', '_blank');
+          }
+        }}
       />
 
       {!parsedLog ? (
@@ -506,9 +589,21 @@ const App = () => {
             onClose={closeFind}
           />
         ) : null}
-        <div className="min-h-0 min-w-0 flex-1">
-          {tab === 'tree' ? (
-            treeNodes.length > 0 ? (
+        {/*
+          Every tab panel stays mounted; only its visibility toggles. Each one
+          holds scroll position and other UI state (react-virtual's scroll
+          offset, our shared horizontal scroll in the Execution Tree,
+          Timeline's pan/zoom) inside the component instance itself — the
+          previous `tab === X ? <A/> : tab === Y ? <B/> : ...` chain unmounted
+          every panel that wasn't active, discarding that state on every tab
+          switch and reopening each view at its initial scroll position.
+          `absolute inset-0` lets every panel occupy the same box without a
+          flex/grid layout having to arbitrate between several visible
+          children — exactly one is ever un-hidden.
+        */}
+        <div className="relative min-h-0 min-w-0 flex-1">
+          <div className={`absolute inset-0 ${tab === 'tree' ? '' : 'hidden'}`}>
+            {treeNodes.length > 0 ? (
               <VirtualTree
                 nodes={treeNodes}
                 selectedId={selectedId}
@@ -523,40 +618,52 @@ const App = () => {
               <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
                 No events match the current filters.
               </div>
-            )
-          ) : tab === 'timeline' ? (
+            )}
+          </div>
+          <div className={`absolute inset-0 ${tab === 'timeline' ? '' : 'hidden'}`}>
             <Timeline
               root={parsedLog?.executionTree ?? null}
               selectedId={selectedId}
               onSelect={setSelectedId}
               theme={theme}
+              active={tab === 'timeline'}
             />
-          ) : tab === 'governor' ? (
-            parsedLog ? (
+          </div>
+          <div className={`absolute inset-0 ${tab === 'governor' ? '' : 'hidden'}`}>
+            {parsedLog ? (
               <GovernorDashboard limits={parsedLog.governorLimits} metrics={parsedLog.metrics} />
-            ) : null
-          ) : tab === 'execution' ? (
+            ) : null}
+          </div>
+          <div className={`absolute inset-0 ${tab === 'execution' ? '' : 'hidden'}`}>
             <ExecutionAnalysis analysis={analysis} />
-          ) : tab === 'soql' ? (
-            <SoqlAnalysis analysis={analysis} />
-          ) : tab === 'dml' ? (
+          </div>
+          <div className={`absolute inset-0 ${tab === 'soql' ? '' : 'hidden'}`}>
+            <SoqlAnalysis analysis={analysis} onJumpToLine={jumpToLine} />
+          </div>
+          <div className={`absolute inset-0 ${tab === 'dml' ? '' : 'hidden'}`}>
             <DmlAnalysis analysis={analysis} />
-          ) : tab === 'flow' ? (
+          </div>
+          <div className={`absolute inset-0 ${tab === 'flow' ? '' : 'hidden'}`}>
             <FlowAnalysis analysis={analysis} />
-          ) : tab === 'debug' ? (
+          </div>
+          <div className={`absolute inset-0 ${tab === 'debug' ? '' : 'hidden'}`}>
             <DebugView lines={parsedLog?.eventLines ?? []} />
-          ) : tab === 'rawtree' ? (
+          </div>
+          <div className={`absolute inset-0 ${tab === 'rawtree' ? '' : 'hidden'}`}>
             <RawTreeView
               lines={parsedLog?.eventLines ?? []}
               find={find}
               onMatches={onMatches}
               theme={theme}
             />
-          ) : tab === 'summary' ? (
+          </div>
+          <div className={`absolute inset-0 ${tab === 'summary' ? '' : 'hidden'}`}>
             <SummaryView log={parsedLog} analysis={analysis} />
-          ) : tab === 'ai' ? (
+          </div>
+          <div className={`absolute inset-0 ${tab === 'ai' ? '' : 'hidden'}`}>
             <AiView log={parsedLog} analysis={analysis} rawLog={rawLog} ai={ai} onRun={runAi} />
-          ) : (
+          </div>
+          <div className={`absolute inset-0 ${tab === 'explorer' ? '' : 'hidden'}`}>
             <LogExplorerView
               rawLog={rawLog}
               find={find}
@@ -564,7 +671,7 @@ const App = () => {
               theme={theme}
               scrollToLine={scrollToLine}
             />
-          )}
+          </div>
         </div>
 
         {tab === 'tree' && selected ? (
