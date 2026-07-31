@@ -3,6 +3,21 @@
 All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.1.1] — 2026-07-31
+
+### Fixed
+
+- **Type/Class/Method columns could attach to the wrong table on an org with only one debug
+  log.** Classic Setup wraps the whole page in an outer layout table; one of its rows has a
+  single `<td>` containing the entire real Debug Logs section — the real list table nested
+  inside it. Scanning a row's full subtree for a log link found the one real log's link buried
+  inside that wrapper row and counted it as a match for the *outer* table too. With only one log
+  in the list, the outer wrapper then tied the inner table's own single genuine match, and the
+  earlier-in-document-order table won the tie — attaching the columns to the wrong, outer table
+  entirely, with headers floating near the page title and data floating off the right edge of
+  the real table. A match now only counts if the link's nearest table ancestor is the exact
+  table being scanned, not one nested even deeper inside it.
+
 ## [1.1.0] — 2026-07-25
 
 ### Added
