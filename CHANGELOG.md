@@ -3,6 +3,17 @@
 All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.1.2] — 2026-07-31
+
+### Fixed
+
+- **ⓘ chip's info panel could render below the bottom of the screen, with no way to reach the
+  Settings button except zooming out.** The panel is `position: fixed` with no height limit or
+  internal scroll of its own, so on a shorter browser window its content extended past the
+  viewport — page scroll can't reach a fixed element, so there was nothing to scroll. It now caps
+  its own height to the space actually available below it and scrolls internally if its content
+  still doesn't fit.
+
 ## [1.1.1] — 2026-07-31
 
 ### Fixed
