@@ -120,6 +120,35 @@ describe('injectColumns', () => {
     expect(decoy.querySelectorAll('.sfda-entry-cell')).toHaveLength(0);
     expect(real.querySelectorAll('td.sfda-entry-cell').length).toBeGreaterThan(0);
   });
+
+  /**
+   * Reported from a real org with exactly one debug log in the list: Classic
+   * Setup wraps the whole page in an outer layout table, one of whose rows has
+   * a single `<td>` containing the *entire* real Debug Logs section — the real
+   * list table nested inside it. A plain subtree search finds the one real
+   * log's link buried inside that wrapper row and counts it as if the wrapper
+   * row were itself a log row. With only one real log, the outer table then
+   * ties the inner table's own single genuine match, and picking whichever
+   * table was seen first favoured the outer (earlier in document order)
+   * wrapper — attaching columns and cells to the wrong, outer table entirely.
+   */
+  it('does not let an outer wrapper table win by counting a log row nested inside it', () => {
+    const outer = document.createElement('table');
+    const wrapperRow = outer.insertRow();
+    const wrapperCell = wrapperRow.insertCell();
+    document.body.appendChild(outer);
+
+    // The one real log's table lives nested inside the outer wrapper row's cell.
+    const real = buildLogTable(['07Lg500000AHo13EAD']);
+    wrapperCell.appendChild(real);
+
+    const pending = injectColumns();
+    expect(pending).toHaveLength(1);
+    expect(pending[0]!.closest('table')).toBe(real);
+    // The outer wrapper row must not have been treated as a log row itself.
+    expect(wrapperRow.hasAttribute('data-sfda-log-id')).toBe(false);
+    expect(outer.querySelectorAll(':scope > tbody > tr > th.sfda-entry-cell')).toHaveLength(0);
+  });
 });
 
 describe('renderEntry', () => {

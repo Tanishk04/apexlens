@@ -120,9 +120,22 @@ const COLUMNS = ['Type', 'Class', 'Method'] as const;
 /**
  * Find the row's log id. The Analyze button already resolves one per row from a
  * link's href/onclick; reuse the same scan rather than a second convention.
+ *
+ * `owner`, when given, rejects a match whose link actually belongs to a table
+ * nested *inside* `row` rather than `row` itself. Classic Setup wraps the
+ * whole page in an outer layout table; one of its rows has a single `<td>`
+ * containing the *entire* real Debug Logs section, real table and all. A
+ * plain subtree search (`row.querySelectorAll`) finds the real log's link
+ * buried inside that wrapper row and reports it as if the wrapper row were
+ * itself a log row — with only one log in the list, that wrapper then ties
+ * the real table's own single genuine match, and `findLogTable` picks the
+ * wrapper because it's earlier in document order. Checking that the link's
+ * nearest table ancestor really is `owner` (not some table nested even
+ * deeper inside it) rejects that false match at the source.
  */
-function rowLogId(row: HTMLTableRowElement): string | null {
+function rowLogId(row: HTMLTableRowElement, owner?: HTMLTableElement): string | null {
   for (const link of row.querySelectorAll('a[href], a[onclick]')) {
+    if (owner && link.closest('table') !== owner) continue;
     const id =
       extractLogId(link.getAttribute('href')) ?? extractLogId(link.getAttribute('onclick'));
     if (id) return id;
@@ -154,7 +167,7 @@ function findLogTable(): HTMLTableElement | null {
   for (const table of document.querySelectorAll('table')) {
     let count = 0;
     for (const row of Array.from(table.rows)) {
-      if (rowLogId(row)) count++;
+      if (rowLogId(row, table)) count++;
     }
     if (count > bestCount) {
       bestCount = count;
@@ -195,7 +208,7 @@ export function injectColumns(): HTMLTableRowElement[] {
   const pending: HTMLTableRowElement[] = [];
   for (const row of Array.from(table.rows)) {
     if (row === header) continue;
-    const logId = rowLogId(row);
+    const logId = rowLogId(row, table);
     if (!logId) continue;
     if (row.querySelector(`.${CELL_CLASS}`)) continue;
     row.setAttribute(LOG_ID_ATTR, logId);
