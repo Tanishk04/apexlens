@@ -406,7 +406,7 @@ const WHATS_NEW =
   'New: Type / Class / Method columns on this page, so you can see which Apex class, trigger ' +
   'or flow produced each log without opening it.';
 
-function buildInfoPopover(shadow: ShadowRoot, version: string, unread: boolean): void {
+export function buildInfoPopover(shadow: ShadowRoot, version: string, unread: boolean): void {
   // Everything lives behind a shadow root: this markup sits inside Salesforce's
   // page, where SLDS would restyle it and our own styles would leak back out.
   // A shadow boundary makes both impossible without a single !important.
@@ -438,7 +438,19 @@ function buildInfoPopover(shadow: ShadowRoot, version: string, unread: boolean):
         clamped on open so the panel is always fully on-screen regardless of
         where the chip sits in a wide, scrolled table.
       */
-      position:fixed; z-index:9999;
+      /*
+        max-height + overflow-y:auto, set alongside top/left in positionPanel:
+        the fixed-position clamping above only kept the panel's top-left corner
+        on-screen, not its bottom edge. With no height bound, a short browser
+        window let the panel's own content — including the Settings button —
+        render past the bottom of the viewport. A page scroll can't reach it
+        (fixed elements don't move with the page) and there was no internal
+        scroll either, so it was flatly unreachable; zooming out was the only
+        way to shrink it back into view. An internal scrollbar fixes that
+        regardless of window size, rather than relying on the content always
+        happening to be short enough.
+      */
+      position:fixed; z-index:9999; overflow-y:auto;
       width:290px; max-width:90vw; box-sizing:border-box; padding:12px;
       font:400 12px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
       color:#181818; background:#fff; border:1px solid #c9c7c5; border-radius:6px;
@@ -530,7 +542,14 @@ function buildInfoPopover(shadow: ShadowRoot, version: string, unread: boolean):
 
   panel.append(heading, whatsNew, source, notice, row);
 
-  /** Clamp the fixed-position panel to the chip, fully inside the viewport. */
+  /**
+   * Clamp the fixed-position panel to the chip, fully inside the viewport —
+   * on all four edges, not just top-left. Bounding `max-height` to the actual
+   * space below `top` is what makes the bottom edge honour the same
+   * constraint the left/right edges already did; `overflow-y:auto` (in the
+   * stylesheet above) is what makes content that still doesn't fit reachable
+   * by scrolling the panel itself, rather than by shrinking the browser zoom.
+   */
   const positionPanel = () => {
     const rect = chip.getBoundingClientRect();
     const margin = 8;
@@ -541,6 +560,7 @@ function buildInfoPopover(shadow: ShadowRoot, version: string, unread: boolean):
     const top = Math.min(rect.bottom + 6, window.innerHeight - margin);
     panel.style.left = `${left}px`;
     panel.style.top = `${top}px`;
+    panel.style.maxHeight = `${Math.max(80, window.innerHeight - top - margin)}px`;
   };
 
   chip.addEventListener('click', (e) => {
