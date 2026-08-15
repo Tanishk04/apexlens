@@ -1,6 +1,6 @@
 {
   "name": "apexlens",
-  "version": "1.1.2",
+  "version": "1.1.3",
   "description": "AI-assisted Salesforce Apex debug log analyzer — Chrome extension.",
   "private": true,
   "repository": {

@@ -3,6 +3,29 @@
 All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.1.3] — 2026-08-15
+
+### Added
+
+- **A "N new logs — refresh to see them" banner on the Debug Logs list.** Classic's list renders
+  once, server-side, and never checks for new logs itself — a log that finishes generating after
+  the page loaded stayed invisible until you thought to reload. ApexLens now polls for the newest
+  log ids every 20s (ids only, never a log body) and shows a dismissible banner when one isn't on
+  the page yet. Off automatically on a metered/slow connection; toggleable in Settings
+  (`notifyNewLogs`, on by default).
+- **A standalone manual refresh button**, bottom-right, always present once polling is on — for
+  refreshing the list on demand instead of waiting on the poll or a banner appearing first. Both
+  it and the banner's Refresh reload only the Debug Logs frame, never the whole Setup shell.
+
+### Fixed
+
+- **Duplicate banners.** Lightning's outer Setup frame and the embedded Classic iframe both match
+  the Debug Logs page check, so polling started independently in both — two pollers, two banners
+  stacked on screen. Polling now only starts in whichever frame actually has the real log table.
+- **The "0 new logs" banner stayed visible.** Its shadow stylesheet's `:host { all: initial; }`
+  reset the browser's own `[hidden] { display: none }` rule along with everything else, since
+  that rule lives outside the shadow tree. Restated explicitly inside the same stylesheet.
+
 ## [1.1.2] — 2026-07-31
 
 ### Fixed
