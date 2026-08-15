@@ -1,4 +1,4 @@
-import { getSessionId, fetchLogEntryPoint, isAllowedSalesforceDomain } from '../api/salesforce';
+import { getSessionId, fetchLogEntryPoint, fetchRecentLogIds, isAllowedSalesforceDomain } from '../api/salesforce';
 import type { EntryPoint } from '../entryPoint';
 import {
   ENTRY_CACHE_KEY,
@@ -62,6 +62,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch((err: unknown) => {
         sendResponse({ ok: false, error: err instanceof Error ? err.message : String(err) });
       });
+    return true;
+  }
+
+  if (message.action === 'getRecentLogIds') {
+    const domain = apiDomainFor(message.domain as string);
+    (async () => {
+      const sessionId = await getSessionId(domain);
+      if (!sessionId) {
+        sendResponse({ ok: false, error: 'No session' });
+        return;
+      }
+      try {
+        const ids = await fetchRecentLogIds(domain, sessionId, (message.limit as number | undefined) ?? 10);
+        sendResponse({ ok: true, ids });
+      } catch (err) {
+        sendResponse({ ok: false, error: err instanceof Error ? err.message : String(err) });
+      }
+    })();
     return true;
   }
 

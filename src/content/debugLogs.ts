@@ -104,7 +104,9 @@ export function isSelfMutation(records: MutationRecord[]): boolean {
         node instanceof HTMLElement &&
         (node.classList.contains(BTN_CLASS) ||
           node.classList.contains(CELL_CLASS) ||
-          node.classList.contains(INFO_CLASS)),
+          node.classList.contains(INFO_CLASS) ||
+          node.classList.contains(BANNER_CLASS) ||
+          node.classList.contains(MANUAL_REFRESH_CLASS)),
     ),
   );
 }
@@ -603,6 +605,197 @@ function injectInfoChip(header: HTMLTableRowElement, lastSeenVersion: string): v
   header.querySelector(`th.${CELL_CLASS}:last-of-type`)?.appendChild(host);
 }
 
+// ---------------------------------------------------------------------------
+// New-log polling
+// ---------------------------------------------------------------------------
+//
+// Classic's Debug Logs list is rendered once, server-side, with nothing on
+// the page watching for new rows — a log that finishes generating after the
+// page loaded is invisible until the user thinks to reload. Polling the
+// background for the newest ApexLog ids and comparing against what's
+// actually rendered lets us tell them a new one exists, without guessing at
+// how to fabricate a correct row ourselves (see findLogTable's own history
+// of getting Classic's real markup wrong).
+
+const NEW_LOG_POLL_MS = 20_000;
+const NEW_LOG_POLL_LIMIT = 10;
+const BANNER_CLASS = 'sfda-new-logs-banner';
+
+/** Every ApexLog id currently visible anywhere on the page — same scan `injectButtons` uses. */
+function renderedLogIds(): Set<string> {
+  const ids = new Set<string>();
+  for (const link of document.querySelectorAll<HTMLAnchorElement>('a[href], a[onclick]')) {
+    const id = extractLogId(link.getAttribute('href')) ?? extractLogId(link.getAttribute('onclick'));
+    if (id) ids.add(id);
+  }
+  return ids;
+}
+
+/**
+ * Which of `fetchedIds` (newest-first from the org) are genuinely new: not
+ * already on the page, and not already dismissed by the user this session.
+ * Pure and exported so the decision is testable without a live Setup page.
+ */
+export function findNewLogIds(
+  renderedIds: Set<string>,
+  fetchedIds: string[],
+  dismissedIds: Set<string>,
+): string[] {
+  return fetchedIds.filter((id) => !renderedIds.has(id) && !dismissedIds.has(id));
+}
+
+export function buildNewLogsBanner(onRefresh: () => void, onDismiss: () => void): { host: HTMLElement; setCount: (n: number) => void } {
+  const host = document.createElement('div');
+  host.className = BANNER_CLASS;
+  const shadow = host.attachShadow({ mode: 'open' });
+
+  const style = document.createElement('style');
+  style.textContent = `
+    :host { all: initial; }
+    /*
+      Reported live: the banner stayed visible reading "0 new logs" even
+      though setCount(0) correctly set host.hidden = true. \`all: initial\`
+      resets every inherited/default property on the host — including
+      \`display\`, whose UA-stylesheet [hidden] { display: none } rule lives
+      OUTSIDE this shadow tree and gets reset right along with everything
+      else. The hidden attribute was still there; the CSS that's supposed to
+      act on it wasn't taking effect anymore. Restated explicitly, inside the
+      same tree that reset it, so it actually applies.
+    */
+    :host([hidden]) { display: none; }
+    .bar {
+      position: fixed; top: 0; left: 50%; transform: translateX(-50%);
+      z-index: 9999; margin-top: 10px;
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 14px; border-radius: 8px;
+      background: #062e6f; border: 1px solid #0176d3; color: #fff;
+      font: 500 13px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      box-shadow: 0 4px 16px rgba(0,0,0,.25);
+    }
+    button { font: inherit; cursor: pointer; border-radius: 4px; }
+    .refresh {
+      padding: 4px 10px; color: #062e6f; background: #fff; border: none; font-weight: 600;
+    }
+    .refresh:hover { background: #e5f1fe; }
+    .dismiss {
+      padding: 2px 6px; color: #cfe4ff; background: transparent; border: none; font-size: 15px; line-height: 1;
+    }
+    .dismiss:hover { color: #fff; }
+  `;
+
+  const bar = document.createElement('div');
+  bar.className = 'bar';
+  const label = document.createElement('span');
+  const refreshBtn = document.createElement('button');
+  refreshBtn.type = 'button';
+  refreshBtn.className = 'refresh';
+  refreshBtn.textContent = 'Refresh';
+  refreshBtn.addEventListener('click', onRefresh);
+  const dismissBtn = document.createElement('button');
+  dismissBtn.type = 'button';
+  dismissBtn.className = 'dismiss';
+  dismissBtn.textContent = '×';
+  dismissBtn.setAttribute('aria-label', 'Dismiss');
+  dismissBtn.addEventListener('click', () => {
+    host.hidden = true;
+    onDismiss();
+  });
+  bar.append(label, refreshBtn, dismissBtn);
+  shadow.append(style, bar);
+
+  const setCount = (n: number) => {
+    label.textContent = `${n} new log${n === 1 ? '' : 's'} — refresh to see ${n === 1 ? 'it' : 'them'}`;
+    host.hidden = n === 0;
+  };
+  return { host, setCount };
+}
+
+const MANUAL_REFRESH_CLASS = 'sfda-manual-refresh';
+
+/**
+ * A standalone refresh control, always present once polling is on — not tied
+ * to a detected count. Requested directly: a way to re-check on demand rather
+ * than waiting on the 20s poll or a banner appearing first. `onRefresh` reruns
+ * the same scoped reload the banner's Refresh button uses (this frame only,
+ * never the whole Setup shell — see startNewLogPolling's ensureBanner).
+ */
+export function buildManualRefreshButton(onRefresh: () => void): HTMLElement {
+  const host = document.createElement('div');
+  host.className = MANUAL_REFRESH_CLASS;
+  const shadow = host.attachShadow({ mode: 'open' });
+
+  const style = document.createElement('style');
+  style.textContent = `
+    :host { all: initial; }
+    :host([hidden]) { display: none; }
+    button {
+      /* Classic already has its own circular refresh icon top-right (next to
+         "Help for this Page") — bottom-right is clear of any native chrome. */
+      position: fixed; bottom: 16px; right: 16px; z-index: 9999;
+      display: flex; align-items: center; justify-content: center;
+      width: 30px; height: 30px; border-radius: 50%;
+      background: #062e6f; border: 1px solid #0176d3; color: #fff;
+      cursor: pointer; font: 16px/1 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      box-shadow: 0 2px 8px rgba(0,0,0,.25);
+    }
+    button:hover { background: #0176d3; }
+  `;
+
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.textContent = '⟳';
+  button.title = 'Refresh Debug Logs list';
+  button.setAttribute('aria-label', 'Refresh Debug Logs list');
+  button.addEventListener('click', onRefresh);
+  shadow.append(style, button);
+
+  return host;
+}
+
+function startNewLogPolling(): void {
+  const dismissed = new Set<string>();
+  // Populated on the first successful poll — nothing is "new" relative to a
+  // baseline we haven't established yet, so the banner never fires on load.
+  let baseline: Set<string> | null = null;
+  let banner: { host: HTMLElement; setCount: (n: number) => void } | null = null;
+
+  const ensureBanner = () => {
+    if (banner) return banner;
+    banner = buildNewLogsBanner(
+      () => location.reload(),
+      () => {
+        for (const id of pendingIds) dismissed.add(id);
+        pendingIds = [];
+      },
+    );
+    document.body.appendChild(banner.host);
+    return banner;
+  };
+
+  let pendingIds: string[] = [];
+
+  const poll = () => {
+    if (!isDebugLogsPage()) return; // SPA nav may have left the page without a reload.
+    if (isConstrainedConnection()) return; // Try again next tick; connection may improve.
+
+    chrome.runtime.sendMessage(
+      { action: 'getRecentLogIds', domain: location.origin, limit: NEW_LOG_POLL_LIMIT },
+      (response: { ok: boolean; ids?: string[] } | undefined) => {
+        if (chrome.runtime.lastError || !response?.ok || !response.ids) return;
+        if (!baseline) {
+          baseline = new Set(response.ids);
+          return;
+        }
+        pendingIds = findNewLogIds(renderedLogIds(), response.ids, dismissed);
+        ensureBanner().setCount(pendingIds.length);
+      },
+    );
+  };
+
+  poll();
+  setInterval(poll, NEW_LOG_POLL_MS);
+}
+
 /** Set when the background reports it stood down; drives the chip's notice. */
 let suspended: { suspended: boolean; averageBytes: number } | null = null;
 
@@ -615,6 +808,16 @@ async function main(): Promise<void> {
   const stored = await chrome.storage.local.get(LAST_SEEN_VERSION_KEY);
   const lastSeenVersion = (stored[LAST_SEEN_VERSION_KEY] as string | undefined) ?? '';
 
+  // Lightning embeds the Classic list in an iframe, and both frames' URLs
+  // match isDebugLogsPage() — the outer frame is /lightning/setup/ApexDebugLogs/…
+  // itself. Column/chip injection already silently no-ops there today because
+  // findLogTable() finds no real table to attach to in that frame. Polling had
+  // no equivalent check, so it started in *both* frames — two independent
+  // pollers, two independent banners, stacked visibly on screen. Started only
+  // once the real table is confirmed present in this frame, same gate the rest
+  // of the feature already relies on.
+  let pollingStarted = false;
+
   let scheduled = 0;
   const scheduleInject = () => {
     if (scheduled) return;
@@ -625,6 +828,16 @@ async function main(): Promise<void> {
       // document_idle meant the button never appeared on that path.
       if (!isDebugLogsPage()) return;
       injectButtons();
+
+      if (settings.notifyNewLogs && !pollingStarted && findLogTable()) {
+        pollingStarted = true;
+        startNewLogPolling();
+        // Manual, on-demand alternative to waiting on the poll or a banner
+        // appearing first — requested directly, since the reload it triggers
+        // is already scoped to this frame, never the whole Setup shell.
+        document.body.appendChild(buildManualRefreshButton(() => location.reload()));
+      }
+
       // The columns are the only part that costs network, so the setting gates
       // them alone — the Analyze button stays regardless.
       if (!settings.entryColumns) return;
