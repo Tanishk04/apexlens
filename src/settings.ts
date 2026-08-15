@@ -17,12 +17,22 @@ export interface Settings {
   autoResolve: boolean;
   /** Stand down on metered or slow connections. */
   respectSaveData: boolean;
+  /**
+   * Poll for new debug logs while the Setup ▸ Debug Logs page is open, and
+   * show a "N new logs — Refresh" banner. The page itself never updates on
+   * its own — Classic's list is rendered once, server-side, with nothing
+   * watching for new rows — so without this a genuinely new log is invisible
+   * until the user thinks to reload. The poll only asks for log *ids*
+   * (`SELECT Id FROM ApexLog ORDER BY StartTime DESC`), never a log body.
+   */
+  notifyNewLogs: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   entryColumns: true,
   autoResolve: true,
   respectSaveData: true,
+  notifyNewLogs: true,
 };
 
 export const SETTINGS_KEY = 'sfda_settings';

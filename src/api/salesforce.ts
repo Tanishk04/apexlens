@@ -71,6 +71,31 @@ function logBodyUrl(domain: string, logId: string): string {
 }
 
 /**
+ * The most recent ApexLog ids in the org, newest first — used to detect logs
+ * that exist server-side but haven't appeared on the (never auto-refreshing)
+ * Debug Logs list yet. Asks for ids only, never a log body: this is metadata,
+ * not the potentially-sensitive log content itself.
+ */
+export async function fetchRecentLogIds(
+  domain: string,
+  sessionId: string,
+  limit: number,
+): Promise<string[]> {
+  const query = `SELECT Id FROM ApexLog ORDER BY StartTime DESC LIMIT ${limit}`;
+  const url = `${domain}/services/data/${API_VERSION}/tooling/query/?q=${encodeURIComponent(query)}`;
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${sessionId}` },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch recent logs: ${response.status} ${response.statusText}`);
+  }
+
+  const data = (await response.json()) as { records?: { Id?: string }[] };
+  return (data.records ?? []).map((r) => r.Id).filter((id): id is string => Boolean(id));
+}
+
+/**
  * Downloads the raw body of a specific debug log.
  */
 export async function fetchLogBody(domain: string, sessionId: string, logId: string): Promise<string> {

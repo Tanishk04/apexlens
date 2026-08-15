@@ -1,5 +1,13 @@
 /** @jest-environment jsdom */
-import { injectColumns, renderEntry, trackRows, isConstrainedConnection } from '../content/debugLogs';
+import {
+  injectColumns,
+  renderEntry,
+  trackRows,
+  isConstrainedConnection,
+  findNewLogIds,
+  buildNewLogsBanner,
+  buildManualRefreshButton,
+} from '../content/debugLogs';
 
 /**
  * The Setup ▸ Debug Logs list is a plain Classic table (Lightning renders the
@@ -271,5 +279,110 @@ describe('trackRows gating', () => {
     trackRows(rows, { autoResolve: false, respectSaveData: true });
 
     expect(rows[0]!.querySelectorAll('td.sfda-entry-cell button')).toHaveLength(1);
+  });
+});
+
+/**
+ * Backs the "N new logs" banner: which of the org's newest ids are genuinely
+ * new relative to what's actually rendered on the (never auto-refreshing)
+ * Debug Logs page right now.
+ */
+describe('findNewLogIds', () => {
+  it('is empty when every fetched id is already rendered', () => {
+    const rendered = new Set(['07L1', '07L2']);
+    expect(findNewLogIds(rendered, ['07L1', '07L2'], new Set())).toEqual([]);
+  });
+
+  it('reports ids that exist in the org but not on the page', () => {
+    const rendered = new Set(['07L1']);
+    expect(findNewLogIds(rendered, ['07L3', '07L2', '07L1'], new Set())).toEqual(['07L3', '07L2']);
+  });
+
+  it('does not re-report an id the user already dismissed', () => {
+    const rendered = new Set<string>();
+    const dismissed = new Set(['07L2']);
+    expect(findNewLogIds(rendered, ['07L1', '07L2'], dismissed)).toEqual(['07L1']);
+  });
+
+  it('is empty for a page with nothing new and nothing dismissed', () => {
+    expect(findNewLogIds(new Set(), [], new Set())).toEqual([]);
+  });
+});
+
+describe('buildNewLogsBanner', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it('starts hidden, and shows a singular/plural count correctly', () => {
+    const { host, setCount } = buildNewLogsBanner(jest.fn(), jest.fn());
+    document.body.appendChild(host);
+    expect(host.hidden).toBe(false); // not yet told a count
+
+    setCount(0);
+    expect(host.hidden).toBe(true);
+
+    setCount(1);
+    expect(host.hidden).toBe(false);
+    const label = host.shadowRoot!.querySelector('.bar span')!;
+    expect(label.textContent).toBe('1 new log — refresh to see it');
+
+    setCount(3);
+    expect(label.textContent).toBe('3 new logs — refresh to see them');
+  });
+
+  it('actually stays hidden via CSS, not just the attribute', () => {
+    // Regression: `:host { all: initial; }` resets the UA [hidden] rule too
+    // (it lives outside this shadow tree), so host.hidden = true alone did
+    // nothing visually — the "0 new logs" banner stayed on screen. Confirms
+    // the explicit `:host([hidden]) { display: none; }` restatement works.
+    const { host, setCount } = buildNewLogsBanner(jest.fn(), jest.fn());
+    document.body.appendChild(host);
+
+    setCount(0);
+    expect(host.hidden).toBe(true);
+    expect(getComputedStyle(host).display).toBe('none');
+
+    setCount(2);
+    expect(host.hidden).toBe(false);
+    expect(getComputedStyle(host).display).not.toBe('none');
+  });
+
+  it('calls onRefresh when Refresh is clicked', () => {
+    const onRefresh = jest.fn();
+    const { host, setCount } = buildNewLogsBanner(onRefresh, jest.fn());
+    document.body.appendChild(host);
+    setCount(2);
+
+    host.shadowRoot!.querySelector<HTMLButtonElement>('.refresh')!.click();
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls onDismiss and hides when × is clicked, without calling onRefresh', () => {
+    const onRefresh = jest.fn();
+    const onDismiss = jest.fn();
+    const { host, setCount } = buildNewLogsBanner(onRefresh, onDismiss);
+    document.body.appendChild(host);
+    setCount(2);
+
+    host.shadowRoot!.querySelector<HTMLButtonElement>('.dismiss')!.click();
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+    expect(onRefresh).not.toHaveBeenCalled();
+    expect(host.hidden).toBe(true);
+  });
+});
+
+describe('buildManualRefreshButton', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it('calls onRefresh when clicked — a standalone, always-present alternative to the banner', () => {
+    const onRefresh = jest.fn();
+    const host = buildManualRefreshButton(onRefresh);
+    document.body.appendChild(host);
+
+    host.shadowRoot!.querySelector<HTMLButtonElement>('button')!.click();
+    expect(onRefresh).toHaveBeenCalledTimes(1);
   });
 });

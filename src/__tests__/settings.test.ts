@@ -45,6 +45,7 @@ describe('settings', () => {
     expect(DEFAULT_SETTINGS.entryColumns).toBe(true);
     expect(DEFAULT_SETTINGS.autoResolve).toBe(true);
     expect(DEFAULT_SETTINGS.respectSaveData).toBe(true);
+    expect(DEFAULT_SETTINGS.notifyNewLogs).toBe(true);
   });
 
   it('round-trips a patch without disturbing the other keys', async () => {
@@ -65,6 +66,7 @@ describe('settings', () => {
       entryColumns: false,
       autoResolve: true,
       respectSaveData: true,
+      notifyNewLogs: true,
     });
   });
 

@@ -1,4 +1,9 @@
-import { isAllowedSalesforceDomain, fetchLogEntryPoint, API_VERSION } from '../api/salesforce';
+import {
+  isAllowedSalesforceDomain,
+  fetchLogEntryPoint,
+  fetchRecentLogIds,
+  API_VERSION,
+} from '../api/salesforce';
 
 describe('isAllowedSalesforceDomain (confused-deputy guard)', () => {
   it('allows real Salesforce host patterns over https', () => {
@@ -22,6 +27,53 @@ describe('isAllowedSalesforceDomain (confused-deputy guard)', () => {
   it('fails closed on malformed input rather than throwing', () => {
     expect(isAllowedSalesforceDomain('not a url')).toBe(false);
     expect(isAllowedSalesforceDomain('')).toBe(false);
+  });
+});
+
+/**
+ * Backs the "N new logs — Refresh" banner: asks for the newest ApexLog ids
+ * only, never a body, so the content script can tell if a log exists
+ * server-side that isn't on the (never auto-refreshing) page yet.
+ */
+describe('fetchRecentLogIds', () => {
+  const originalFetch = global.fetch;
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('returns ids in the order the org returned them', async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ records: [{ Id: '07L1' }, { Id: '07L2' }, { Id: '07L3' }] }),
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const ids = await fetchRecentLogIds('https://x.my.salesforce.com', 'sid', 3);
+    expect(ids).toEqual(['07L1', '07L2', '07L3']);
+
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toContain(`/services/data/${API_VERSION}/tooling/query/?q=`);
+    expect(url).toContain(encodeURIComponent('LIMIT 3'));
+    expect((init as RequestInit).headers).toMatchObject({ Authorization: 'Bearer sid' });
+  });
+
+  it('returns an empty array rather than throwing when there are no logs', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ records: [] }),
+    }) as unknown as typeof fetch;
+
+    expect(await fetchRecentLogIds('https://x.my.salesforce.com', 'sid', 10)).toEqual([]);
+  });
+
+  it('throws on a failed request, for the caller to report rather than silently ignore', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      statusText: 'Internal Server Error',
+    }) as unknown as typeof fetch;
+
+    await expect(fetchRecentLogIds('https://x.my.salesforce.com', 'sid', 10)).rejects.toThrow(/500/);
   });
 });
 

@@ -20,6 +20,11 @@ nowhere for your data to go except the destinations described below, all of whic
   Settings page.
 - **The debug log content itself.** Once fetched (or opened from a local `.log` file), the log is
   parsed entirely inside the extension, in your browser. Nothing is uploaded anywhere by default.
+- **A list of recent log ids, every 20 seconds, while the Setup ▸ Debug Logs page is open.**
+  Salesforce renders that page once and never checks for new logs itself, so ApexLens polls
+  `SELECT Id FROM ApexLog ORDER BY StartTime DESC` to tell you a new one exists (with a Refresh
+  banner) — ids only, never a log body, never the log's content. Off automatically on a metered or
+  slow connection, and can be turned off entirely in Settings.
 
 ## What ApexLens does NOT do
 

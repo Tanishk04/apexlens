@@ -187,6 +187,13 @@ const Options = () => {
             label="Pause on slow or metered connections"
             description="Honours the browser's Data Saver setting and backs off on 2G/3G, switching to Resolve buttons instead of fetching automatically."
           />
+
+          <Toggle
+            checked={settings.notifyNewLogs}
+            onChange={(v) => update({ notifyNewLogs: v })}
+            label="Notify about new logs"
+            description="The Debug Logs page never updates on its own — Salesforce renders it once and never checks again. Every 20s, asks for the newest log ids (never a log body) and shows a Refresh banner if one isn't on the page yet."
+          />
         </section>
 
         <section className="mt-6">
