@@ -192,7 +192,14 @@ const Options = () => {
             checked={settings.notifyNewLogs}
             onChange={(v) => update({ notifyNewLogs: v })}
             label="Notify about new logs"
-            description="The Debug Logs page never updates on its own — Salesforce renders it once and never checks again. Every 20s, asks for the newest log ids (never a log body) and shows a Refresh banner if one isn't on the page yet."
+            description="Off by default. The Debug Logs page never updates on its own — Salesforce renders it once and never checks again. When on, every 20s asks for the newest log ids (never a log body) and shows a Refresh banner if one isn't on the page yet."
+          />
+
+          <Toggle
+            checked={settings.manualRefreshButton}
+            onChange={(v) => update({ manualRefreshButton: v })}
+            label="Manual refresh button"
+            description="A ⟳ button on the Debug Logs list to refresh it on demand. No polling, no network call of its own — independent of the notification setting above."
           />
         </section>
 

@@ -24,15 +24,25 @@ export interface Settings {
    * watching for new rows — so without this a genuinely new log is invisible
    * until the user thinks to reload. The poll only asks for log *ids*
    * (`SELECT Id FROM ApexLog ORDER BY StartTime DESC`), never a log body.
+   * Default off — an unasked-for background poll on someone else's org is
+   * exactly the kind of thing that makes a user distrust and uninstall.
    */
   notifyNewLogs: boolean;
+  /**
+   * A manual refresh button on the Debug Logs list, independent of
+   * notifyNewLogs — no polling, no network call of its own, just a reload of
+   * this frame on click. Its own checkbox because someone may want on-demand
+   * refresh without opting into the background poll.
+   */
+  manualRefreshButton: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   entryColumns: true,
   autoResolve: true,
   respectSaveData: true,
-  notifyNewLogs: true,
+  notifyNewLogs: false,
+  manualRefreshButton: true,
 };
 
 export const SETTINGS_KEY = 'sfda_settings';

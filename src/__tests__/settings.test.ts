@@ -45,7 +45,11 @@ describe('settings', () => {
     expect(DEFAULT_SETTINGS.entryColumns).toBe(true);
     expect(DEFAULT_SETTINGS.autoResolve).toBe(true);
     expect(DEFAULT_SETTINGS.respectSaveData).toBe(true);
-    expect(DEFAULT_SETTINGS.notifyNewLogs).toBe(true);
+    // Off by default: an unasked-for background poll is exactly the kind of
+    // thing that makes a user distrust and uninstall — opt-in only.
+    expect(DEFAULT_SETTINGS.notifyNewLogs).toBe(false);
+    // No poll of its own, so this one can default on independently.
+    expect(DEFAULT_SETTINGS.manualRefreshButton).toBe(true);
   });
 
   it('round-trips a patch without disturbing the other keys', async () => {
@@ -66,7 +70,8 @@ describe('settings', () => {
       entryColumns: false,
       autoResolve: true,
       respectSaveData: true,
-      notifyNewLogs: true,
+      notifyNewLogs: false,
+      manualRefreshButton: true,
     });
   });
 

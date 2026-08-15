@@ -817,6 +817,10 @@ async function main(): Promise<void> {
   // once the real table is confirmed present in this frame, same gate the rest
   // of the feature already relies on.
   let pollingStarted = false;
+  // Separate from pollingStarted: the manual button has its own checkbox and
+  // no poll of its own, so it can be on while notifyNewLogs is off (its
+  // default) or vice versa.
+  let refreshButtonAdded = false;
 
   let scheduled = 0;
   const scheduleInject = () => {
@@ -832,9 +836,13 @@ async function main(): Promise<void> {
       if (settings.notifyNewLogs && !pollingStarted && findLogTable()) {
         pollingStarted = true;
         startNewLogPolling();
-        // Manual, on-demand alternative to waiting on the poll or a banner
-        // appearing first — requested directly, since the reload it triggers
-        // is already scoped to this frame, never the whole Setup shell.
+      }
+
+      if (settings.manualRefreshButton && !refreshButtonAdded && findLogTable()) {
+        refreshButtonAdded = true;
+        // On-demand alternative to waiting on the poll or a banner appearing
+        // first — the reload it triggers is already scoped to this frame,
+        // never the whole Setup shell.
         document.body.appendChild(buildManualRefreshButton(() => location.reload()));
       }
 

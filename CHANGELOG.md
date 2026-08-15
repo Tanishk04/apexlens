@@ -11,11 +11,12 @@ All notable changes to this project are documented here. Format loosely follows
   once, server-side, and never checks for new logs itself — a log that finishes generating after
   the page loaded stayed invisible until you thought to reload. ApexLens now polls for the newest
   log ids every 20s (ids only, never a log body) and shows a dismissible banner when one isn't on
-  the page yet. Off automatically on a metered/slow connection; toggleable in Settings
-  (`notifyNewLogs`, on by default).
-- **A standalone manual refresh button**, bottom-right, always present once polling is on — for
-  refreshing the list on demand instead of waiting on the poll or a banner appearing first. Both
-  it and the banner's Refresh reload only the Debug Logs frame, never the whole Setup shell.
+  the page yet. Off automatically on a metered/slow connection; **opt-in, off by default** —
+  toggle from Settings ("Notify about new logs").
+- **A standalone manual refresh button**, bottom-right — refreshes the list on demand instead of
+  reloading the whole page. Its own checkbox in Settings ("Manual refresh button", on by default),
+  independent of the notification toggle: no polling, no network call of its own, just a
+  frame-scoped reload on click.
 
 ### Fixed
 
